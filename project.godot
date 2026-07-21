@@ -21,6 +21,14 @@ window/stretch/aspect="expand"
 [rendering]
 
 renderer/rendering_method="forward_plus"
+; default_texture_filter=1 is Linear (no mipmaps). Kept at 1 rather than 2
+; (Linear+Mipmap) deliberately: the terrain TileSet packs tiles adjacent in a
+; single atlas with zero separation, so mipmapping would bleed neighbouring
+; atlas regions into each other and show seams when zoomed out (zoom range is
+; [0.5, 2.5]). World TileMapLayers that need mipmaps should opt in per-texture
+; via the atlas import settings instead of flipping this global default, which
+; would also affect future UI. Linear filtering still gives the HD, non-pixel
+; look; snapping stays OFF below for the same reason.
 textures/canvas_textures/default_texture_filter=1
 anti_aliasing/quality/msaa_2d=2
 2d/snap/snap_2d_transforms_to_pixel=false
