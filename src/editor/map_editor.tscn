@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://crusademapedit01"]
+
+[ext_resource type="Script" path="res://src/editor/map_editor.gd" id="1_mapedit"]
+
+[node name="MapEditor" type="Node2D"]
+script = ExtResource("1_mapedit")
+
+[node name="Preview" type="TileMapLayer" parent="."]
+modulate = Color(1, 1, 1, 0.5)
+texture_filter = 2
+y_sort_enabled = true
