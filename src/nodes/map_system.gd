@@ -16,6 +16,7 @@ extends Node2D
 
 func _ready() -> void:
 	_apply_elevation_offsets()
+	_demo_paint_pond()
 
 ## Positions each elevation layer from MapConstants and sets a matching
 ## y_sort_origin so the layer sorts at its true (unlifted) world depth.
@@ -34,3 +35,41 @@ func get_elevation_layer(level: int) -> TileMapLayer:
 	if level < 0 or level >= elevation_layers.size():
 		return null
 	return elevation_layers[level]
+
+## DEMO / PLACEHOLDER (Story #3): proves the whole TileSet + dual-grid stack end
+## to end by building the terrain TileSet from the committed atlas and painting a
+## small autotiled pond onto Elevation0. Remove once the real editor (Story #4)
+## drives painting. Runtime-only: guarded out of the @tool editor path and any
+## headless CI import so it writes nothing there and never crashes on a missing
+## asset. Additive -- does not touch existing map_system behaviour.
+func _demo_paint_pond() -> void:
+	if Engine.is_editor_hint():
+		return
+	var tex := load("res://assets/tilesets/terrain_atlas.png")
+	if tex == null:
+		push_warning("map_system demo: terrain_atlas.png not found; skipping pond.")
+		return
+	var ts := TileSetBuilder.build_terrain_tileset(tex)
+	var layer := elevation_layers[0]
+	layer.tile_set = ts
+	var source_id := ts.get_source_id(0)
+
+	# "Pond": a handful of filled logical cells. The dual-grid autotiler reads
+	# these to pick clean-edged atlas tiles for the surrounding display cells.
+	var pond_cells := {
+		Vector2i(1, 1): true, Vector2i(2, 1): true, Vector2i(3, 1): true,
+		Vector2i(1, 2): true, Vector2i(2, 2): true, Vector2i(3, 2): true,
+		Vector2i(2, 3): true,
+	}
+	var is_filled := func(c: Vector2i) -> bool:
+		return pond_cells.has(c)
+
+	# Iterate the display cells straddling the pond (one ring wider than the
+	# filled region so the outer edge tiles resolve), skipping the empty sentinel.
+	for dy in range(1, 5):
+		for dx in range(1, 5):
+			var dcell := Vector2i(dx, dy)
+			var atlas_coord := DualGrid.tile_for_display(dcell, is_filled)
+			if atlas_coord == DualGrid.SENTINEL:
+				continue
+			layer.set_cell(dcell, source_id, atlas_coord)
