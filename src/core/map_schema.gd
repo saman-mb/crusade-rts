@@ -26,8 +26,15 @@ const KEY_CELLS := "cells"          ## -> array of cell objects
 const KEY_CELL_POS := "p"           ## -> [x, y]
 const KEY_CELL_SOURCE := "s"        ## -> int source id
 const KEY_CELL_ATLAS := "a"         ## -> [ax, ay]
+const KEY_CELL_ALT := "alt"         ## -> int alternative_tile (additive optional field, default 0; no version bump)
 
 const TILE_SHAPE_NAME := "isometric"   ## written into the doc's tile_shape metadata.
+
+## Metadata / provenance root key names (additive; readers may ignore them).
+const KEY_TILE_SHAPE := "tile_shape"                  ## -> String, metadata (== TILE_SHAPE_NAME)
+const KEY_TILE_SIZE := "tile_size"                    ## -> [w, h] metadata
+const KEY_GENERATED_BY := "generated_by"              ## -> String provenance tag
+const GENERATED_BY_NAME := "crusade-rts editor"       ## value written into KEY_GENERATED_BY
 
 ## Minimal set of root keys a document must carry to be usable.
 const REQUIRED_ROOT_KEYS: Array[String] = [KEY_SCHEMA_VERSION, KEY_LAYERS]
