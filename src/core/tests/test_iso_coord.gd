@@ -14,9 +14,7 @@ func _initialize() -> void:
 	_test_elevation_single_source()
 
 	print("PASS %d / FAIL %d" % [_pass, _fail])
-	if _fail > 0:
-		OS.set_exit_code(1)
-	quit()
+	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
 
@@ -51,10 +49,10 @@ func _test_round_trip() -> void:
 
 ## The four canonical cart_to_iso values (W=64, H=32).
 func _test_exact_values() -> void:
-	_check(_v_eq(IsoCoord.cart_to_iso(Vector2i(0, 0)), Vector2(0, 0)), "cart_to_iso(0,0)=(0,0)")
-	_check(_v_eq(IsoCoord.cart_to_iso(Vector2i(1, 0)), Vector2(64, 32)), "cart_to_iso(1,0)=(64,32)")
-	_check(_v_eq(IsoCoord.cart_to_iso(Vector2i(0, 1)), Vector2(-64, 32)), "cart_to_iso(0,1)=(-64,32)")
-	_check(_v_eq(IsoCoord.cart_to_iso(Vector2i(1, 1)), Vector2(0, 64)), "cart_to_iso(1,1)=(0,64)")
+	_check(_v_eq(IsoCoord.cart_to_iso(Vector2i(0, 0)), Vector2(64, 32)), "cart_to_iso(0,0)=(64,32)")
+	_check(_v_eq(IsoCoord.cart_to_iso(Vector2i(1, 0)), Vector2(128, 64)), "cart_to_iso(1,0)=(128,64)")
+	_check(_v_eq(IsoCoord.cart_to_iso(Vector2i(0, 1)), Vector2(0, 64)), "cart_to_iso(0,1)=(0,64)")
+	_check(_v_eq(IsoCoord.cart_to_iso(Vector2i(1, 1)), Vector2(64, 96)), "cart_to_iso(1,1)=(64,96)")
 
 ## Center inside, a point past a vertex outside, the four vertices on the boundary.
 func _test_point_in_diamond() -> void:
@@ -82,10 +80,12 @@ func _test_point_in_diamond() -> void:
 ## Hover points hugging a shared edge resolve to the expected cell (beats
 ## local_to_map edge inaccuracy, godot#89423).
 func _test_pick_cell_edges() -> void:
-	# Boundary between cell (0,0) [center (0,0)] and (1,0) [center (64,32)].
-	# A point nudged onto the (1,0) side resolves to (1,0); onto the (0,0) side, (0,0).
-	var toward_10 := Vector2(34, 17)
-	var toward_00 := Vector2(30, 15)
+	# Boundary between cells (0,0) and (1,0): a point past the midpoint toward a
+	# center resolves to that cell (edge-robust, unlike local_to_map near edges).
+	var c0 := IsoCoord.cart_to_iso(Vector2i(0, 0))
+	var c1 := IsoCoord.cart_to_iso(Vector2i(1, 0))
+	var toward_10 := c0.lerp(c1, 0.6)   # 60% toward (1,0)
+	var toward_00 := c0.lerp(c1, 0.4)   # 40% -> still nearer (0,0)
 	_check(IsoCoord.pick_cell(toward_10) == Vector2i(1, 0), "edge point %s -> (1,0) got %s" % [toward_10, IsoCoord.pick_cell(toward_10)])
 	_check(IsoCoord.pick_cell(toward_00) == Vector2i(0, 0), "edge point %s -> (0,0) got %s" % [toward_00, IsoCoord.pick_cell(toward_00)])
 

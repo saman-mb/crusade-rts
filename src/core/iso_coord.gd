@@ -8,18 +8,21 @@ extends RefCounted
 
 # --- Pure math (no Node deps) ---
 
-## Cartesian cell -> local iso pixel (diamond center).
+## Cartesian cell -> local iso pixel (diamond center). Matches
+## TileMapLayer.map_to_local: Godot anchors the isometric cell origin a half-tile
+## from our raw diamond origin, so we add the (w, h) origin offset -- making this
+## pure math a faithful, Node-free replica of the layer transform.
 static func cart_to_iso(cell: Vector2i, tile_size := MapConstants.TILE_SIZE) -> Vector2:
 	var w := tile_size.x / 2.0
 	var h := tile_size.y / 2.0
-	return Vector2((cell.x - cell.y) * w, (cell.x + cell.y) * h)
+	return Vector2((cell.x - cell.y) * w + w, (cell.x + cell.y) * h + h)
 
 ## Local iso pixel -> fractional (continuous) cell coords. Exact inverse of cart_to_iso.
 static func iso_to_cart(local_pos: Vector2, tile_size := MapConstants.TILE_SIZE) -> Vector2:
 	var w := tile_size.x / 2.0
 	var h := tile_size.y / 2.0
-	var fx := local_pos.x / w
-	var fy := local_pos.y / h
+	var fx := (local_pos.x - w) / w
+	var fy := (local_pos.y - h) / h
 	return Vector2((fx + fy) / 2.0, (fy - fx) / 2.0)
 
 ## Local iso pixel -> nearest cell. Rounding the exact continuous inverse picks the

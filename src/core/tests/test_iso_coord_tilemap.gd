@@ -29,9 +29,7 @@ func _initialize() -> void:
 	layer.queue_free()
 
 	print("PASS %d / FAIL %d" % [_pass, _fail])
-	if _fail > 0:
-		OS.set_exit_code(1)
-	quit()
+	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
 
