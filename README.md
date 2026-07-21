@@ -10,7 +10,7 @@ The goal is a polished, modern look and feel — think a **2D isometric StarCraf
 sprites, crisp 2:1 diamond projection, smooth RTS camera, animated terrain, and a fast in-game editing
 loop for iterating on tilesets and layouts without needing units in the scene.
 
-> **Status:** In development. Story #1 (project architecture & multi-layer map system) and Story #3 (TileSet configuration & animated tiles) are implemented on `main`; the remaining stories are tracked as GitHub issues.
+> **Status:** In development. Story #1 (project architecture & multi-layer map system), Story #3 (TileSet configuration & animated tiles), and Story #4 (in-game map editor core tooling) are implemented on `main`; the remaining stories are tracked as GitHub issues.
 
 ## Objective
 
@@ -79,11 +79,31 @@ diff-reviewable in code.
   the global default to avoid atlas-seam bleed on the zero-separation terrain
   atlas; layers that need them opt in per-texture.
 
-`src/nodes/map_system.gd` includes a small runtime-only `_demo_paint_pond()`
-hook (guarded by `Engine.is_editor_hint()` so it no-ops in the editor and in
-headless CI import) that builds the TileSet and paints an autotiled pond on
-`Elevation0` to prove the stack end to end. It's a placeholder to be removed once
-the in-game editor (Story #4) drives painting.
+The Story-#3 `_demo_paint_pond()` placeholder has been removed from
+`src/nodes/map_system.gd`. Runtime painting is now driven by the in-game
+MapEditor (Story #4): **Left-click = Paint**, **Right-click = Erase**, **`[` /
+`]` or number keys = switch the active elevation layer**, and a translucent
+hover preview shows the tile under the cursor. The editor reuses
+`IsoCoord.pick_cell_global` for camera-safe, edge-robust screen→cell projection,
+so painting stays accurate at any zoom or pan.
+
+## In-Game Map Editor (Story #4)
+
+The in-game editor is instanced live in the main scene as a `MapEditor` child of
+`MapSystem`, so painting works at runtime without any Godot-editor tooling.
+
+- **Controls.** Left-click paints the active tile, right-click erases, `[` and
+  `]` (or the number keys) switch the active elevation layer, and a translucent
+  hover preview renders the tile under the cursor before you commit it.
+- **Camera-safe projection.** Screen→cell picking goes through
+  `IsoCoord.pick_cell_global`, so paints land on the correct cell regardless of
+  camera zoom or pan and stay robust at diamond edges.
+- **Split of concerns.** `BrushCore` (`src/editor/brush_core.gd`) holds the
+  pure, headless-tested brush decision logic — what a paint/erase at a given cell
+  and layer resolves to — with no Node or scene dependencies, so it stays unit
+  testable. `MapEditor` (`src/editor/map_editor.gd`) is the thin runtime node
+  that wires input and the hover preview to that core and drives the
+  `MapSystem` layer stack it points at via its exported `map_system_path`.
 
 ### Regenerating the placeholder atlas
 
