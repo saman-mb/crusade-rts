@@ -14,9 +14,7 @@ func _initialize() -> void:
 	_test_elevation_single_source()
 
 	print("PASS %d / FAIL %d" % [_pass, _fail])
-	if _fail > 0:
-		OS.set_exit_code(1)
-	quit()
+	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
 

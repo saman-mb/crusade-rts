@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.4.1
+          use-dotnet: false
+          include-templates: false
+
+      - name: Godot version
+        run: godot --version
+
+      - name: Import project
+        run: timeout 300 godot --headless --path . --import || true
+
+      - name: Verify class cache
+        run: test -f .godot/global_script_class_cache.cfg || { echo "::error::global class cache missing after import"; exit 1; }
+
+      # Every suite prints a "PASS n / FAIL m" summary, so a naive `grep FAIL`
+      # always matches. We match `FAIL: ` (a real failed assert line) or
+      # `FAIL [1-9]` (nonzero summary), require a `PASS ` line (else
+      # crash/missing-cache), and also honor the process exit code.
+      - name: Run core tests
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail=0
+          shopt -s nullglob
+          tests=(src/core/tests/test_*.gd)
+          if [ ${#tests[@]} -eq 0 ]; then echo "::error::no test_*.gd found"; exit 1; fi
+          for t in "${tests[@]}"; do
+            echo "::group::$t"
+            out="$(godot --headless --path . --script "res://$t" 2>&1)"
+            code=$?
+            echo "$out"
+            echo "::endgroup::"
+            if echo "$out" | grep -Eq 'FAIL: |FAIL [1-9]'; then echo "::error::$t reported FAIL"; fail=1; fi
+            if ! echo "$out" | grep -q 'PASS '; then echo "::error::$t produced no PASS summary (crash?)"; fail=1; fi
+            if [ "$code" -ne 0 ]; then echo "::error::$t exited $code"; fail=1; fi
+          done
+          exit "$fail"

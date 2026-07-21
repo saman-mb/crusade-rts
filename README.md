@@ -1,5 +1,7 @@
 # Crusade — Isometric Map Engine & Editor Framework (V2)
 
+[![CI](https://github.com/saman-mb/crusade-rts/actions/workflows/ci.yml/badge.svg)](https://github.com/saman-mb/crusade-rts/actions/workflows/ci.yml)
+
 > **Codename:** Crusade (`crusade-rts`)
 
 A high-performance 2D isometric map runtime and in-game editor built in **Godot 4**.
