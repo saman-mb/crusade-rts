@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3 uid="uid://crusademapsys01"]
+[gd_scene load_steps=3 format=3 uid="uid://crusademapsys01"]
 
 [ext_resource type="Script" path="res://src/nodes/map_system.gd" id="1_mapsys"]
+[ext_resource type="PackedScene" uid="uid://crusadertscam01" path="res://src/nodes/rts_camera.tscn" id="2_rtscam"]
 
 [node name="MapSystem" type="Node2D"]
 y_sort_enabled = true
@@ -21,3 +22,5 @@ y_sort_origin = 64
 
 [node name="Objects" type="TileMapLayer" parent="."]
 y_sort_enabled = true
+
+[node name="Camera" parent="." instance=ExtResource("2_rtscam")]
