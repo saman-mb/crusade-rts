@@ -8,7 +8,7 @@ The goal is a polished, modern look and feel — think a **2D isometric StarCraf
 sprites, crisp 2:1 diamond projection, smooth RTS camera, animated terrain, and a fast in-game editing
 loop for iterating on tilesets and layouts without needing units in the scene.
 
-> **Status:** Planning. No engine code yet — the epic and user stories below are tracked as GitHub issues.
+> **Status:** In development. Story #1 (project architecture & multi-layer map system) is implemented on `main`; the remaining stories are tracked as GitHub issues.
 
 ## Objective
 
