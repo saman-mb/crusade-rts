@@ -36,6 +36,8 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          set +e   # GitHub's `shell: bash` injects -e; disable it so a failing
+                   # test doesn't abort the step before we echo output / aggregate
           fail=0
           shopt -s nullglob
           tests=(src/core/tests/test_*.gd)
