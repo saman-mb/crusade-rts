@@ -14,6 +14,7 @@ func _initialize() -> void:
 	_test_idempotent_on_current()
 	_test_already_v2_passthrough()
 	_test_monotonic()
+	_test_future_version_preserved()
 	_test_preserves_existing_keys()
 	_test_non_mutation()
 
@@ -126,6 +127,21 @@ func _test_monotonic() -> void:
 		var layer := {MapSchema.KEY_LAYER_NAME: "t", MapSchema.KEY_CELLS: []}
 		var r := MapMigrator.migrate({MapSchema.KEY_SCHEMA_VERSION: v, MapSchema.KEY_LAYERS: [layer]})
 		_i_eq(int(r[MapSchema.KEY_SCHEMA_VERSION]), MapSchema.CURRENT_SCHEMA, "monotonic v%d -> CURRENT_SCHEMA" % v)
+
+## A FUTURE version (> CURRENT_SCHEMA) is returned untouched with its version
+## preserved -- NOT silently downgraded to CURRENT_SCHEMA -- so the loader can
+## refuse it rather than mis-parsing a newer shape. (#39)
+func _test_future_version_preserved() -> void:
+	var future := MapSchema.CURRENT_SCHEMA + 1
+	# Use a v1-style dict coord that the v1->v2 step WOULD flatten, to prove no
+	# transform ran: it must survive unchanged.
+	var layer := {MapSchema.KEY_LAYER_NAME: "future", MapSchema.KEY_CELLS: [
+		{MapSchema.KEY_CELL_POS: {"x": 7, "y": 9}},
+	]}
+	var r := MapMigrator.migrate({MapSchema.KEY_SCHEMA_VERSION: future, MapSchema.KEY_LAYERS: [layer]})
+	_i_eq(int(r[MapSchema.KEY_SCHEMA_VERSION]), future, "future version preserved (not downgraded)")
+	var pos: Variant = r[MapSchema.KEY_LAYERS][0][MapSchema.KEY_CELLS][0][MapSchema.KEY_CELL_POS]
+	_ok(typeof(pos) == TYPE_DICTIONARY, "future doc left untransformed (dict coord not flattened)")
 
 ## An unrelated extra root key survives the migration.
 func _test_preserves_existing_keys() -> void:

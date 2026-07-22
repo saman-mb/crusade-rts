@@ -42,7 +42,25 @@ static func valid_cell(cell: Variant, tile_set: TileSet) -> bool:
 		return false
 
 	var src := tile_set.get_source(sid) as TileSetAtlasSource
-	return src != null and src.has_tile(Vector2i(int(a[0]), int(a[1])))
+	if src == null:
+		return false
+	var atlas_coords := Vector2i(int(a[0]), int(a[1]))
+	if not src.has_tile(atlas_coords):
+		return false
+
+	# alt (alternative_tile) is an additive optional field (default 0 == the base
+	# tile). When present it must be a non-negative number, and a nonzero alt must
+	# name an alternative the source actually owns -- otherwise Godot would clamp
+	# it on paint and silently corrupt the round trip. (#44)
+	var alt_v: Variant = cell.get(MapSchema.KEY_CELL_ALT, 0)
+	if not _is_number(alt_v):
+		return false
+	var alt := int(alt_v)
+	if alt < 0:
+		return false
+	if alt != 0 and not src.has_alternative_tile(atlas_coords, alt):
+		return false
+	return true
 
 ## True for JSON-decoded numbers. JSON yields float, but an already-int value is
 ## accepted too so callers that build dicts in code aren't rejected.
@@ -58,6 +76,13 @@ static func _is_number(v: Variant) -> bool:
 static func validate_document(doc: Variant, tile_set: TileSet) -> Dictionary:
 	if typeof(doc) != TYPE_DICTIONARY:
 		return {"ok": false, "data": {}, "diagnostics": ["root is not a Dictionary"]}
+
+	# Enforce the REQUIRED_ROOT_KEYS contract (schema_version + layers). In the
+	# normal flow migration runs first and always stamps schema_version, so this
+	# only rejects a raw, un-migrated (or hand-truncated) doc -- making the schema
+	# constant a live check instead of advertised intent. (#41)
+	if not MapSchema.has_required_root_keys(doc):
+		return {"ok": false, "data": {}, "diagnostics": ["missing required root key(s): %s" % str(MapSchema.REQUIRED_ROOT_KEYS)]}
 
 	# Deep copy so the caller's document is never mutated by the sanitize pass.
 	var out: Dictionary = (doc as Dictionary).duplicate(true)

@@ -27,7 +27,17 @@ static func save_text(path: String, text: String) -> bool:
 	f.close()
 
 	if FileAccess.file_exists(path):
-		DirAccess.copy_absolute(path, path + ".bak")
+		# Snapshot the prior file to .bak. A failed backup is non-fatal (the atomic
+		# rename below still protects the live file) but must not be silent. (#45)
+		var berr := DirAccess.copy_absolute(path, path + ".bak")
+		if berr != OK:
+			push_warning("MapFileIO.save_text: backup to %s.bak failed (err %d); continuing" % [path, berr])
+
+	# POSIX rename atomically replaces an existing target; Godot's rename can fail
+	# on Windows when the target exists, so there we drop it first -- the .bak
+	# snapshot above is the crash-safety net for that non-atomic window. (#45)
+	if OS.get_name() == "Windows" and FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
 
 	var err := DirAccess.rename_absolute(tmp, path)
 	if err != OK:

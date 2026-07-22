@@ -14,6 +14,14 @@ var _pass: int = 0
 var _fail: int = 0
 
 func _initialize() -> void:
+	_test_layers_roundtrip()
+	_test_objects_roundtrip()
+
+	print("PASS %d / FAIL %d" % [_pass, _fail])
+	quit(1 if _fail > 0 else 0)
+
+## The classic terrain-only round-trip: serialize_layers -> save -> load_into_layers.
+func _test_layers_roundtrip() -> void:
 	var ts := _build_tileset()
 	var sid := ts.get_source_id(0)
 
@@ -103,8 +111,106 @@ func _initialize() -> void:
 	dst2.queue_free()
 	_cleanup_files(path)
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
+## Objects overlay round-trip (#43): paint terrain elevation layers PLUS a distinct
+## objects layer, serialize_map -> save -> load_map into fresh elevation + objects
+## targets. Proves object tiles survive save/reload, route to the objects overlay by
+## KIND (not elevation), and never cross-bleed into the elevation stack (nor terrain
+## into objects). A null objects target on load must drop object cells, not misroute.
+func _test_objects_roundtrip() -> void:
+	var ts := _build_tileset()
+	var sid := ts.get_source_id(0)
+
+	# --- SOURCE: 2 elevation layers + 1 objects layer, distinct cells. ---
+	var elev0 := TileMapLayer.new()
+	elev0.tile_set = ts
+	root.add_child(elev0)
+	var elev1 := TileMapLayer.new()
+	elev1.tile_set = ts
+	root.add_child(elev1)
+	var obj := TileMapLayer.new()
+	obj.tile_set = ts
+	root.add_child(obj)
+
+	elev0.set_cell(Vector2i(1, 1), sid, Vector2i(0, 0), 0)
+	elev1.set_cell(Vector2i(2, 2), sid, Vector2i(0, 0), 0)
+	# Objects at cells that collide with NO terrain cell, so bleed is detectable.
+	obj.set_cell(Vector2i(7, 7), sid, Vector2i(0, 0), 0)
+	obj.set_cell(Vector2i(8, 9), sid, Vector2i(0, 0), 0)
+
+	var src_elev: Array[TileMapLayer] = [elev0, elev1]
+	var doc := MapSerializer.serialize_map(src_elev, obj)
+
+	# The objects entry must be tagged kind=objects at the OBJECTS_ELEVATION sentinel.
+	var found_obj_entry := false
+	for entry in doc[MapSchema.KEY_LAYERS]:
+		if String(entry[MapSchema.KEY_LAYER_KIND]) == MapSchema.LAYER_KIND_OBJECTS:
+			found_obj_entry = true
+			_i_eq(int(entry[MapSchema.KEY_LAYER_ELEVATION]), MapSchema.OBJECTS_ELEVATION,
+				"objects entry at OBJECTS_ELEVATION sentinel")
+	_ok(found_obj_entry, "serialize_map emits an objects-kind entry")
+
+	var path := "user://test_map_objects_roundtrip.json"
+	_cleanup_files(path)
+	_ok(MapFileIO.save_text(path, MapSerializer.to_json(doc)), "objects atomic save ok")
+	var r := MapFileIO.load_text(path)
+	_ok(r["ok"], "objects read back ok")
+
+	# --- DESTINATION: fresh elevation stack + fresh objects layer. ---
+	var d_elev0 := TileMapLayer.new()
+	d_elev0.tile_set = ts
+	root.add_child(d_elev0)
+	var d_elev1 := TileMapLayer.new()
+	d_elev1.tile_set = ts
+	root.add_child(d_elev1)
+	var d_obj := TileMapLayer.new()
+	d_obj.tile_set = ts
+	root.add_child(d_obj)
+	var dst_elev: Array[TileMapLayer] = [d_elev0, d_elev1]
+
+	# Pre-dirty the objects target to prove load_map clears it too.
+	d_obj.set_cell(Vector2i(3, 3), sid, Vector2i(0, 0), 0)
+
+	var res := MapLoader.load_map(r["text"], dst_elev, d_obj, ts)
+	_ok(res["ok"], "load_map ok")
+
+	# Stale objects cell gone; object cells landed on the OBJECTS layer only.
+	_i_eq(d_obj.get_cell_source_id(Vector2i(3, 3)), -1, "load_map cleared stale objects cell")
+	_i_eq(d_obj.get_cell_source_id(Vector2i(7, 7)), sid, "obj (7,7) survived to objects layer")
+	_i_eq(d_obj.get_cell_source_id(Vector2i(8, 9)), sid, "obj (8,9) survived to objects layer")
+	_i_eq(d_obj.get_used_cells().size(), 2, "objects layer cell count == 2")
+
+	# Terrain survived on its elevation layers.
+	_i_eq(d_elev0.get_cell_source_id(Vector2i(1, 1)), sid, "elev0 (1,1) survived")
+	_i_eq(d_elev1.get_cell_source_id(Vector2i(2, 2)), sid, "elev1 (2,2) survived")
+
+	# No cross-bleed EITHER direction: objects not on terrain, terrain not on objects.
+	_i_eq(d_elev0.get_cell_source_id(Vector2i(7, 7)), -1, "obj cell absent from elev0")
+	_i_eq(d_elev1.get_cell_source_id(Vector2i(7, 7)), -1, "obj cell absent from elev1")
+	_i_eq(d_obj.get_cell_source_id(Vector2i(1, 1)), -1, "terrain cell absent from objects")
+
+	# --- A terrain-only load target (null objects) must DROP object cells, not crash. ---
+	var d2_elev0 := TileMapLayer.new()
+	d2_elev0.tile_set = ts
+	root.add_child(d2_elev0)
+	var d2_elev1 := TileMapLayer.new()
+	d2_elev1.tile_set = ts
+	root.add_child(d2_elev1)
+	var dst2_elev: Array[TileMapLayer] = [d2_elev0, d2_elev1]
+	var res2 := MapLoader.load_map(r["text"], dst2_elev, null, ts)
+	_ok(res2["ok"], "load_map ok with null objects target")
+	_i_eq(d2_elev0.get_cell_source_id(Vector2i(1, 1)), sid, "terrain still loads with null objects")
+	_ok((res2["diagnostics"] as Array).size() >= 1, "null objects target yields a diagnostic")
+
+	# --- Cleanup. ---
+	elev0.queue_free()
+	elev1.queue_free()
+	obj.queue_free()
+	d_elev0.queue_free()
+	d_elev1.queue_free()
+	d_obj.queue_free()
+	d2_elev0.queue_free()
+	d2_elev1.queue_free()
+	_cleanup_files(path)
 
 # --- helpers ---
 
