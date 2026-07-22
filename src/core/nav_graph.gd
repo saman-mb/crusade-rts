@@ -71,15 +71,16 @@ func find_path(from_cell: Vector2i, from_tier: int, to_cell: Vector2i, to_tier: 
 	# 3. Cross-tier (or split same-tier) via the ramp portal graph.
 	return _route_via_portals(from_cell, from_tier, to_cell, to_tier)
 
-## Rebuilds tier `tier` from a fresh walkability Callable, then rebuilds the whole
-## portal graph so cross-tier reachability reflects the new grid. Simple + correct.
-## NOTE: a future optimization could re-wire only the portal edges touching `tier`
-## instead of rebuilding the entire NavPortalGraph.
+## Rebuilds tier `tier` from a fresh walkability Callable, then refreshes ONLY
+## that tier's portal edges (#59) -- cross-tier ramp edges and other tiers'
+## intra-tier edges are structural w.r.t. this grid and stay untouched, so an
+## in-editor terrain edit re-solves just the tier that changed instead of the
+## whole NavPortalGraph.
 func rebuild_tier(tier: int, walkable: Callable) -> void:
 	if tier < 0 or tier >= _grids.size():
 		return
 	_grids[tier] = NavTierGrid.new(region, walkable)
-	_portals = NavPortalGraph.new(region, _grids, _ramps)
+	_portals.refresh_tier_edges(tier, _grids)
 
 # --- private stitching helpers ---
 
@@ -109,9 +110,11 @@ func _route_via_portals(from_cell: Vector2i, from_tier: int, to_cell: Vector2i, 
 	if entries.is_empty() or exits.is_empty():
 		return []
 
-	# Pick the cheapest connectable pair. Cost is a comparable heuristic: the two
-	# grid-segment lengths plus the number of portal hops.
-	var best_cost: int = -1
+	# Pick the cheapest connectable pair. Cost is the FAITHFUL traversal cost (#61):
+	# entry/exit grid-segment lengths plus the true cost of the portal id-path
+	# (intra-tier segment lengths between portals + each ramp hop's climb weight),
+	# so selection prefers genuinely shorter routes rather than just fewer hops.
+	var best_cost: float = -1.0
 	var best_ids: PackedInt64Array = PackedInt64Array()
 	for entry: int in entries:
 		var entry_info: Dictionary = _portals.endpoint_info(entry)
@@ -128,14 +131,42 @@ func _route_via_portals(from_cell: Vector2i, from_tier: int, to_cell: Vector2i, 
 			var seg_out: Array[Vector2i] = to_grid.path_within(exit_cell, to_cell)
 			if seg_out.is_empty():
 				continue
-			var cost: int = seg_in.size() + seg_out.size() + ids.size()
-			if best_cost < 0 or cost < best_cost:
+			var cost: float = _seg_cost(seg_in) + _portal_path_cost(ids) + _seg_cost(seg_out)
+			if best_cost < 0.0 or cost < best_cost:
 				best_cost = cost
 				best_ids = ids
 
 	if best_ids.is_empty():
 		return []
 	return _stitch(from_cell, from_tier, best_ids, to_cell, to_tier)
+
+## Traversal cost of an intra-tier grid segment: number of STEPS (edges), i.e.
+## cells minus one, so a same-cell/empty segment costs 0.
+func _seg_cost(seg: Array[Vector2i]) -> float:
+	return float(maxi(seg.size() - 1, 0))
+
+## True traversal cost of a portal id-path: sums the intra-tier grid-segment
+## step counts between consecutive same-tier endpoints and each ramp hop's climb
+## weight (the high endpoint's weight_scale, as applied by NavPortalGraph). This
+## makes _route_via_portals compare pairs by real distance + climb effort, not a
+## hop count that ignored the ground covered between portals. (#61)
+func _portal_path_cost(ids: PackedInt64Array) -> float:
+	var graph: AStar2D = _portals.astar()
+	var total: float = 0.0
+	for k in range(ids.size() - 1):
+		var a_info: Dictionary = _portals.endpoint_info(ids[k])
+		var b_info: Dictionary = _portals.endpoint_info(ids[k + 1])
+		var a_tier: int = a_info["tier"]
+		var b_tier: int = b_info["tier"]
+		if a_tier == b_tier:
+			var grid: NavTierGrid = _grids[a_tier]
+			var seg: Array[Vector2i] = grid.path_within(a_info["cell"], b_info["cell"])
+			total += _seg_cost(seg)
+		else:
+			# Ramp hop: charge the climb weight of the higher endpoint (>= 1 step).
+			var high_id: int = ids[k] if a_tier > b_tier else ids[k + 1]
+			total += maxf(graph.get_point_weight_scale(high_id), 1.0)
+	return total
 
 ## Splices one chosen portal id-path into a continuous waypoint list:
 ##   from_cell -> [grid] -> entry endpoint,

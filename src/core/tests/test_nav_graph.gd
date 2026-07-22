@@ -16,6 +16,8 @@ func _initialize() -> void:
 	_test_unreachable_within_tier()
 	_test_tier_grid_matches_query()
 	_test_rebuild_tier()
+	_test_prefers_lower_climb_cost_ramp()
+	_test_rebuild_tier_refreshes_portals()
 	_test_guards()
 
 	print("PASS %d / FAIL %d" % [_pass, _fail])
@@ -186,6 +188,62 @@ func _test_rebuild_tier() -> void:
 	# The grid handed out reflects the rebuild too.
 	var g0: NavTierGrid = nav.tier_grid(0)
 	_ok(g0.is_walkable(Vector2i(3, 3)) == false, "rebuild: new wall cell not walkable")
+
+## 7b (#61): two ramps offer symmetric-distance cross-tier routes, but one climbs
+## a STEEP ramp (weight 10) and the other a GENTLE one (weight 1). The steep ramp
+## is listed FIRST -- the old hop-count heuristic ignored climb weight and would
+## pick it (first among equal hop counts). The cost-faithful selector must climb
+## the GENTLE ramp instead. Distances are equal by construction, so ONLY the climb
+## weight breaks the tie.
+func _test_prefers_lower_climb_cost_ramp() -> void:
+	var region := Rect2i(0, 0, 6, 6)
+	var nav := NavGraph.new(2, region, [_open(), _open()],
+		[
+			NavRamp.new(Vector2i(4, 0), 0, Vector2i(4, 0), 1, 10.0),  # STEEP, listed first
+			NavRamp.new(Vector2i(0, 4), 0, Vector2i(0, 4), 1, 1.0),   # GENTLE
+		])
+	# from (0,0)@t0 to (4,4)@t1: (0,0)->steep low (4,0) is 4 steps; (0,0)->gentle
+	# low (0,4) is 4 steps -- equal. steep high (4,0)->(4,4) is 4; gentle high
+	# (0,4)->(4,4) is 4 -- equal. Only the 10x vs 1x climb differs.
+	var path: Array = nav.find_path(Vector2i(0, 0), 0, Vector2i(4, 4), 1)
+	_ok(not path.is_empty(), "climb-cost: a cross-tier path exists")
+	_ok(_wp_has(path, Vector2i(0, 4), 1), "climb-cost: climbs the GENTLE ramp (0,4)@t1")
+	_ok(not _wp_has(path, Vector2i(4, 0), 1), "climb-cost: avoids the STEEP ramp (4,0)@t1")
+
+## 7c (#59): rebuild_tier refreshes ONLY the touched tier's portal edges and must
+## ADD and DROP them correctly. Tier 0 is split by a wall at x==3, so left->right
+## is only possible up-and-over: ramp P (left@t0 <-> t1) + a tier-1 intra-tier
+## portal edge + ramp Q (t1 <-> right@t0). Walling tier 1 severs that intra-tier
+## edge (route breaks); re-opening tier 1 must RE-ADD it (route restored) -- a
+## stale/incremental bug would fail to restore because the two ramp pairs are
+## otherwise disconnected (tier 0 is split).
+func _test_rebuild_tier_refreshes_portals() -> void:
+	var region := Rect2i(0, 0, 6, 6)
+	var t0_wall: Dictionary = {}
+	for y in range(0, 6):
+		t0_wall[Vector2i(3, y)] = true
+	var ramps: Array = [
+		NavRamp.new(Vector2i(2, 2), 0, Vector2i(2, 2), 1),  # P: left half <-> tier 1
+		NavRamp.new(Vector2i(4, 4), 0, Vector2i(4, 4), 1),  # Q: right half <-> tier 1
+	]
+	var nav := NavGraph.new(2, region, [_rule(t0_wall), _open()], ramps)
+
+	# Tier 1 open -> up-and-over route exists (uses the tier-1 intra-tier edge).
+	var open_path: Array = nav.find_path(Vector2i(0, 0), 0, Vector2i(5, 5), 0)
+	_ok(not open_path.is_empty(), "refresh: up-and-over route exists with tier 1 open")
+
+	# Wall tier 1 too -> the tier-1 intra-tier portal edge is severed -> no route.
+	var t1_wall: Dictionary = {}
+	for y in range(0, 6):
+		t1_wall[Vector2i(3, y)] = true
+	nav.rebuild_tier(1, _rule(t1_wall))
+	var walled: Array = nav.find_path(Vector2i(0, 0), 0, Vector2i(5, 5), 0)
+	_ok(walled.is_empty(), "refresh: route broken after walling tier 1")
+
+	# Re-open tier 1 -> refresh_tier_edges must RE-ADD the intra-tier edge.
+	nav.rebuild_tier(1, _open())
+	var restored: Array = nav.find_path(Vector2i(0, 0), 0, Vector2i(5, 5), 0)
+	_ok(not restored.is_empty(), "refresh: route restored after re-opening tier 1")
 
 ## 8: out-of-range tiers and unwalkable endpoints all return [].
 func _test_guards() -> void:

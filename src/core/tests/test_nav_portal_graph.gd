@@ -10,6 +10,8 @@ var _fail: int = 0
 
 func _initialize() -> void:
 	_test_portal_graph()
+	_test_split_tier_non_reachable()
+	_test_shared_high_endpoint_weight()
 
 	print("PASS %d / FAIL %d" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -35,6 +37,11 @@ func _v2_eq(a: Vector2, b: Vector2, msg: String) -> void:
 ## Walkable Callable: every cell is walkable, so intra-tier reachable is always true.
 func _all_walkable(_cell: Vector2i) -> bool:
 	return true
+
+## Walkability Callable rejecting a full vertical wall at x==3 (splits a 6-wide
+## tier into disjoint left/right halves).
+func _wall_at_x3(cell: Vector2i) -> bool:
+	return cell.x != 3
 
 # --- tests ---
 
@@ -115,3 +122,56 @@ func _test_portal_graph() -> void:
 	# Portal position is pure iso math (matches NavRamp.endpoint_world_pos).
 	var pos: Vector2 = a.get_point_position(id_a_high)
 	_v2_eq(pos, NavRamp.endpoint_world_pos(Vector2i(0, 1), 1), "portal pos == endpoint_world_pos")
+
+## Split-tier NEGATIVE coverage (#62): two endpoints on the SAME tier separated by
+## a wall are NOT connected -- the "connect only when reachable" branch's false
+## side (the earlier test only exercised the reachable=true side). tier 0 is split
+## at x==3; ramp A's low is on the left, ramp B's low is on the right, so the two
+## tier-0 lows must NOT be joined, while the open tier-1 highs still are.
+func _test_split_tier_non_reachable() -> void:
+	var region := Rect2i(0, 0, 6, 6)
+	var split := Callable(self, "_wall_at_x3")
+	var open := Callable(self, "_all_walkable")
+	var grid0 := NavTierGrid.new(region, split)   # tier 0 split by the wall
+	var grid1 := NavTierGrid.new(region, open)    # tier 1 fully open
+	var tier_grids: Array = [grid0, grid1]
+
+	var ramp_l := NavRamp.new(Vector2i(1, 0), 0, Vector2i(1, 1), 1)  # low on LEFT half
+	var ramp_r := NavRamp.new(Vector2i(5, 0), 0, Vector2i(5, 1), 1)  # low on RIGHT half
+	var graph := NavPortalGraph.new(region, tier_grids, [ramp_l, ramp_r])
+	var a: AStar2D = graph.astar()
+
+	var id_l_low: int = NavRamp.endpoint_id(Vector2i(1, 0), 0, region)
+	var id_r_low: int = NavRamp.endpoint_id(Vector2i(5, 0), 0, region)
+	var id_l_high: int = NavRamp.endpoint_id(Vector2i(1, 1), 1, region)
+	var id_r_high: int = NavRamp.endpoint_id(Vector2i(5, 1), 1, region)
+
+	_ok(not a.are_points_connected(id_l_low, id_r_low),
+		"split tier: tier-0 lows across the wall are NOT connected")
+	_ok(a.are_points_connected(id_l_high, id_r_high),
+		"split tier: tier-1 highs (open) remain connected")
+	# Each ramp still bridges its own pair.
+	_ok(a.are_points_connected(id_l_low, id_l_high), "split tier: left ramp still bridges")
+	_ok(a.are_points_connected(id_r_low, id_r_high), "split tier: right ramp still bridges")
+
+## Shared-high-endpoint climb weight (#60): two ramps whose HIGH endpoint is the
+## same (cell, tier) but with different weights -> the endpoint takes the MAX
+## weight (steepest wins), never silently first-ramp-wins.
+func _test_shared_high_endpoint_weight() -> void:
+	var region := Rect2i(0, 0, 6, 6)
+	var open := Callable(self, "_all_walkable")
+	var tier_grids: Array = [NavTierGrid.new(region, open), NavTierGrid.new(region, open)]
+
+	# Both ramps climb to the SAME high cell (2,1)@t1 from different lows.
+	var gentle := NavRamp.new(Vector2i(1, 0), 0, Vector2i(2, 1), 1, 1.5)
+	var steep := NavRamp.new(Vector2i(3, 0), 0, Vector2i(2, 1), 1, 4.0)
+	var graph := NavPortalGraph.new(region, tier_grids, [gentle, steep])
+	var a: AStar2D = graph.astar()
+
+	var id_high: int = NavRamp.endpoint_id(Vector2i(2, 1), 1, region)
+	_ok(is_equal_approx(a.get_point_weight_scale(id_high), 4.0),
+		"shared high endpoint takes MAX climb weight (4.0), not first-ramp 1.5")
+	# Order independence: the max holds regardless of ramp order.
+	var graph2 := NavPortalGraph.new(region, tier_grids, [steep, gentle])
+	_ok(is_equal_approx(graph2.astar().get_point_weight_scale(id_high), 4.0),
+		"shared high endpoint MAX weight is order-independent")
