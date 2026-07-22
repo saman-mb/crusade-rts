@@ -1,38 +1,16 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for DualGrid (integer cell space; reads TileSetConstants.LOOKUP).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Bit convention under test: TL=1, TR=2, BL=4, BR=8.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_corner_mask()
 	_test_mask_bijection()
 	_test_logical_corners_of_display()
 	_test_inverse_property()
 	_test_tile_for_display_pond()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
-
-# --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact Vector2i equality check with message.
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
 
 # --- tests ---
 

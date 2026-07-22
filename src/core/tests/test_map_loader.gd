@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Runtime tests for MapLoader against REAL Godot 4.4 TileMapLayer nodes + an
 ## in-memory isometric TileSet. Authored + statically checked now, executed once a
 ## binary is available: godot --headless --script <this file>. Proves that parse
@@ -11,10 +11,8 @@ extends SceneTree
 ##   set_cell(coords, source_id := -1, atlas_coords := Vector2i(-1,-1), alternative := 0)
 ##   get_cell_source_id(coords); get_cell_alternative_tile(coords); clear().
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	var ts := _build_tileset()
 	var sid := ts.get_source_id(0)  ## the one valid source id; atlas (0,0) is its only tile.
 
@@ -44,26 +42,8 @@ func _initialize() -> void:
 	layer0.queue_free()
 	layer1.queue_free()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-## Exact Vector2i equality check with message.
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 ## Builds a minimal isometric DIAMOND_DOWN TileSet with a single atlas source whose
 ## tile (0,0) exists, backed by an in-memory ImageTexture (no GPU/atlas file), mirroring

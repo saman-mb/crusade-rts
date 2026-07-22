@@ -1,12 +1,10 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for MapMigrator (sequential migrate-UP chain to CURRENT_SCHEMA).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Uses MapSchema.* for every key/version -- no string literals, no magic ints.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_missing_version_is_v0()
 	_test_v0_wraps_legacy_cells()
 	_test_v1_coord_flatten()
@@ -18,22 +16,8 @@ func _initialize() -> void:
 	_test_preserves_existing_keys()
 	_test_non_mutation()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
 
 ## Recursive deep equality for Dictionary/Array/scalar Variants.
 func _dict_eq(a: Variant, b: Variant) -> bool:

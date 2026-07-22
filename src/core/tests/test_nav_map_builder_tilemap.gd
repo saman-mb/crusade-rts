@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Runtime tests that drive NavMapBuilder against REAL Godot 4.4 TileMapLayer
 ## nodes. Requires a Godot 4.4 runtime; authored + statically checked now,
 ## executed once a binary is available: godot --headless --script <this file>.
@@ -10,8 +10,6 @@ extends SceneTree
 ##   set_cell(coords, source_id := -1, atlas_coords := Vector2i(-1,-1), alternative := 0)
 ##   get_cell_source_id(coords); get_used_rect(); get_used_cells().
 
-var _pass: int = 0
-var _fail: int = 0
 
 ## Duck-typed MapSystem stand-in exposing `elevation_layers` (the primary path).
 class MapSystemStub extends RefCounted:
@@ -26,7 +24,7 @@ class MapSystemProbeStub extends RefCounted:
 			return null
 		return _layers[i]
 
-func _initialize() -> void:
+func _run() -> void:
 	var ts := _build_tileset()
 	var source_id := ts.get_source_id(0)
 	var atlas := Vector2i(0, 0)  ## tile (0,0) exists on the source below -> a valid cell.
@@ -62,18 +60,8 @@ func _initialize() -> void:
 	layer0.queue_free()
 	layer1.queue_free()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
 
 ## Same minimal isometric TileSet the brush/iso tilemap tests build: one atlas
 ## source whose tile (0,0) exists, backed by an in-memory ImageTexture.

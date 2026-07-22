@@ -1,12 +1,10 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for ToolState (no Node deps; drives only the state machine + static keymap).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Guards the undo rule (EYEDROPPER is non-mutating) and the keycode collision guards.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_initial()
 	_test_select()
 	_test_invalid_select()
@@ -15,22 +13,6 @@ func _initialize() -> void:
 	_test_label()
 	_test_from_keycode()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
-
-# --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
 
 # --- tests ---
 

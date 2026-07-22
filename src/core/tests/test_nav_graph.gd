@@ -1,14 +1,12 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for NavGraph -- the multi-tier nav facade (per-tier grids +
 ## ramp portal graph). Headless: AStar2D/AStarGrid2D are RefCounted, no servers.
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Guards the stitching contract: flat within a tier, hop tiers ONLY over ramps,
 ## [] when no route, and { cell, tier } waypoints that begin at from and end at to.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_same_tier_grid_path()
 	_test_cross_tier_via_ramp()
 	_test_no_ramp_no_cross()
@@ -20,26 +18,8 @@ func _initialize() -> void:
 	_test_rebuild_tier_refreshes_portals()
 	_test_guards()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-## Exact Vector2i equality check with message.
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 ## Walkability Callable that treats any cell in `blocked` as a hole/cliff (false).
 func _rule(blocked: Dictionary) -> Callable:

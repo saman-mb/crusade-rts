@@ -1,12 +1,10 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for NavTierGrid (headless; AStarGrid2D is RefCounted, no servers).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Guards the "solids block / update() before query" contract and the []-on-invalid rule.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_open_region_has_path()
 	_test_wall_blocks()
 	_test_is_walkable()
@@ -15,26 +13,8 @@ func _initialize() -> void:
 	_test_solid_endpoint_returns_empty()
 	_test_update_post_construction()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-## Exact Vector2i equality check with message.
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 ## Builds a walkability Callable that treats any cell in `blocked` as a hole/cliff.
 func _rule(blocked: Dictionary) -> Callable:

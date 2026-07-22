@@ -1,38 +1,16 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for BrushCore (no Node deps; drives only static decision funcs).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Guards the "empty is -1, never 0" pitfall and the PAINT/ERASE resolve matrix.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_is_empty()
 	_test_resolve_paint()
 	_test_resolve_erase()
 	_test_clamp_level()
 	_test_cycle_level()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
-
-# --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-## Exact Vector2i equality check with message.
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 # --- tests ---
 

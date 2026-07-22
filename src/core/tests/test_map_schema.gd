@@ -1,13 +1,11 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for MapSchema (the map-file schema contract constants).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Guards the invariants downstream tooling relies on: version/limit values,
 ## tile-size derivation from MapConstants, and non-empty DISTINCT key names.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_version_and_limits()
 	_test_tile_size_derives()
 	_test_keys_non_empty()
@@ -15,30 +13,6 @@ func _initialize() -> void:
 	_test_required_root_keys()
 	_test_tile_shape_name()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
-
-# --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-## Exact Vector2i equality check with message.
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
-
-## String inequality (distinctness) check with message.
-func _s_neq(a: String, b: String, msg: String) -> void:
-	_ok(a != b, "%s: both equal %s" % [msg, a])
 
 # --- tests ---
 

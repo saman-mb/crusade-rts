@@ -1,12 +1,10 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for ModeController (no Node deps; drives only its stateful decision funcs).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## ModeController is stateful, so each test builds a fresh ModeController.new().
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_initial_state()
 	_test_toggle_menu_open()
 	_test_toggle_menu_round_trip()
@@ -15,18 +13,6 @@ func _initialize() -> void:
 	_test_compose_play_menu_open()
 	_test_editor_menu_open()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
-
-# --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
 
 # --- tests ---
 

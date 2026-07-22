@@ -1,35 +1,18 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for NavRamp (no Node deps). Covers endpoint_id determinism &
 ## collision-freedom within a region, ctor field storage, and the pure-iso world
 ## position (IsoCoord.cart_to_iso + MapConstants.elevation_offset, y = -32*tier).
 ## Runner: godot --headless --script <this file>.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_endpoint_id_deterministic()
 	_test_endpoint_id_no_collision()
 	_test_ctor_stores_fields()
 	_test_endpoint_world_pos()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 func _v2_eq(a: Vector2, b: Vector2, msg: String) -> void:
 	_ok(a.is_equal_approx(b), "%s: expected %s got %s" % [msg, b, a])

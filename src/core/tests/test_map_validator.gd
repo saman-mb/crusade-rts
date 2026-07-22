@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Runtime tests for MapValidator against a REAL in-memory Godot 4.4 TileSet.
 ## Authored + statically checked now, executed once a binary is available:
 ##   godot --headless --script <this file>
@@ -7,10 +7,8 @@ extends SceneTree
 ## validate_document deep-copies (never mutates the caller's doc), and that
 ## JSON-float coords still validate through the int() casts.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	var ts := _build_tileset()
 	var sid := ts.get_source_id(0)  ## the one valid source id; atlas (0,0) is its only tile.
 
@@ -24,22 +22,8 @@ func _initialize() -> void:
 	_test_alternative_tile(ts, sid)
 	_test_required_root_keys(ts, sid)
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
 
 ## Builds a minimal isometric DIAMOND_DOWN TileSet with a single atlas source whose
 ## tile (0,0) exists, backed by an in-memory ImageTexture (no GPU/atlas file).

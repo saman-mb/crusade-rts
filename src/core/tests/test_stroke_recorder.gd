@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for StrokeRecorder (the Command Pattern wrapper): per-cell change
 ## accumulation, first-before-wins / last-after-wins, net-zero + no-op dropping, and the
 ## real UndoRedo batch driven through an in-memory grid (no TileMapLayer needed, since
@@ -6,10 +6,8 @@ extends SceneTree
 ## godot --headless --script <this file>. Guards the "empty is -1, never 0" convention and
 ## the one-commit-equals-one-undo-step contract. CI greps "FAIL: ".
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_record_and_changes()
 	_test_first_before_wins_last_after_wins()
 	_test_net_zero_drop()
@@ -19,26 +17,8 @@ func _initialize() -> void:
 	_test_undo_redo_batch()
 	_test_empty_recorder_creates_no_action()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-## Exact Vector2i equality check with message.
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 ## Minimal Dictionary-backed target that mimics a TileMapLayer's set_cell seam so the
 ## UndoRedo batch can be tested with no live Godot nodes. src -1 means an empty/cleared

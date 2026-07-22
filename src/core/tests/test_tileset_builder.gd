@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Runtime tests for TileSetBuilder against a live, in-memory TileSet.
 ## Requires a Godot 4.4 runtime; authored + statically checked now, executed in
 ## CI: godot --headless --script <this file>. Config-correctness is proven
@@ -6,10 +6,8 @@ extends SceneTree
 ## a separate, clearly-labeled block verifies the committed atlas PNG on disk
 ## (which CI imports before running this test).
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	# Build against an in-memory texture: geometry/animation correctness must not
 	# hinge on the on-disk asset being imported.
 	var img := Image.create(TileSetConstants.ATLAS_PX.x, TileSetConstants.ATLAS_PX.y, false, Image.FORMAT_RGBA8)
@@ -23,23 +21,13 @@ func _initialize() -> void:
 		_test_water_animation(src)
 	_test_committed_asset()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
 
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-func _v_eq(a: Vector2i, b: Vector2i) -> bool:
+func _v_match(a: Vector2i, b: Vector2i) -> bool:
 	return a == b
 
-func _i_eq(a: int, b: int) -> bool:
+func _i_match(a: int, b: int) -> bool:
 	return a == b
 
 ## Approximate float equality for per-frame durations.
@@ -52,17 +40,17 @@ func _f_eq(a: float, b: float) -> bool:
 func _test_geometry(ts: TileSet) -> void:
 	_ok(ts.tile_shape == TileSet.TILE_SHAPE_ISOMETRIC, "tile_shape not ISOMETRIC")
 	_ok(ts.tile_layout == TileSet.TILE_LAYOUT_DIAMOND_DOWN, "tile_layout not DIAMOND_DOWN")
-	_ok(_v_eq(ts.tile_size, Vector2i(128, 64)), "tile_size %s != (128,64)" % ts.tile_size)
+	_ok(_v_match(ts.tile_size, Vector2i(128, 64)), "tile_size %s != (128,64)" % ts.tile_size)
 
 ## Exactly one atlas source, with the contracted region size. Returns it (or null).
 func _test_source(ts: TileSet) -> TileSetAtlasSource:
-	_ok(_i_eq(ts.get_source_count(), 1), "source count %d != 1" % ts.get_source_count())
+	_ok(_i_match(ts.get_source_count(), 1), "source count %d != 1" % ts.get_source_count())
 	if ts.get_source_count() < 1:
 		return null
 	var src := ts.get_source(ts.get_source_id(0)) as TileSetAtlasSource
 	_ok(src != null, "source 0 is not a TileSetAtlasSource")
 	if src != null:
-		_ok(_v_eq(src.texture_region_size, TileSetConstants.REGION_SIZE),
+		_ok(_v_match(src.texture_region_size, TileSetConstants.REGION_SIZE),
 			"texture_region_size %s != %s" % [src.texture_region_size, TileSetConstants.REGION_SIZE])
 	return src
 
@@ -77,22 +65,22 @@ func _test_tiles(src: TileSetAtlasSource) -> void:
 		var data := src.get_tile_data(coord, 0)
 		_ok(data != null, "no tile created at LOOKUP coord %s" % coord)
 		if data != null:
-			_ok(_v_eq(data.texture_origin, TileSetConstants.TEXTURE_ORIGIN),
+			_ok(_v_match(data.texture_origin, TileSetConstants.TEXTURE_ORIGIN),
 				"texture_origin at %s is %s != %s" % [coord, data.texture_origin, TileSetConstants.TEXTURE_ORIGIN])
 
 	var water := TileSetConstants.WATER_ANIM_COORDS
 	var wdata := src.get_tile_data(water, 0)
 	_ok(wdata != null, "no water tile at %s" % water)
 	if wdata != null:
-		_ok(_v_eq(wdata.texture_origin, TileSetConstants.TEXTURE_ORIGIN),
+		_ok(_v_match(wdata.texture_origin, TileSetConstants.TEXTURE_ORIGIN),
 			"water texture_origin %s != %s" % [wdata.texture_origin, TileSetConstants.TEXTURE_ORIGIN])
 
 ## Water tile carries the full multi-frame animation config.
 func _test_water_animation(src: TileSetAtlasSource) -> void:
 	var water := TileSetConstants.WATER_ANIM_COORDS
-	_ok(_i_eq(src.get_tile_animation_frames_count(water), TileSetConstants.WATER_FRAMES),
+	_ok(_i_match(src.get_tile_animation_frames_count(water), TileSetConstants.WATER_FRAMES),
 		"water frames_count %d != %d" % [src.get_tile_animation_frames_count(water), TileSetConstants.WATER_FRAMES])
-	_ok(_i_eq(src.get_tile_animation_columns(water), TileSetConstants.WATER_COLUMNS),
+	_ok(_i_match(src.get_tile_animation_columns(water), TileSetConstants.WATER_COLUMNS),
 		"water columns %d != %d" % [src.get_tile_animation_columns(water), TileSetConstants.WATER_COLUMNS])
 	for i in TileSetConstants.WATER_FRAMES:
 		var dur := src.get_tile_animation_frame_duration(water, i)
@@ -109,5 +97,5 @@ func _test_committed_asset() -> void:
 	_ok(disk != null, "committed atlas res://assets/tilesets/terrain_atlas.png failed to load")
 	if disk != null:
 		var size := Vector2i(disk.get_size())
-		_ok(_v_eq(size, TileSetConstants.ATLAS_PX),
+		_ok(_v_match(size, TileSetConstants.ATLAS_PX),
 			"committed atlas size %s != %s" % [size, TileSetConstants.ATLAS_PX])

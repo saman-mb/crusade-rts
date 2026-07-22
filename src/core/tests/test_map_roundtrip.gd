@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## End-to-end integration proof for the map save/load pipeline: the
 ## paint -> serialize -> atomic file write -> read back -> load-into-fresh-layers
 ## round-trip preserves every cell (pos, source, atlas, alt) across all elevation
@@ -10,16 +10,12 @@ extends SceneTree
 ## freshly create_tile'd atlas source owns -- so all cells survive MapValidator on
 ## load; a nonzero atlas or alt would be dropped as invalid.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_layers_roundtrip()
 	_test_objects_roundtrip()
 	_test_alt_roundtrip()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 ## Nonzero alternative_tile survives the full save/load round-trip (#44). Every
 ## other case here paints alt 0; this proves a real alt is serialized and repainted
@@ -253,22 +249,6 @@ func _test_objects_roundtrip() -> void:
 	_cleanup_files(path)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-## Exact Vector2i equality check with message.
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 ## Order-independent equality of two layers' used-cell sets, via Dictionary
 ## membership (get_used_cells() order is not guaranteed by Godot).

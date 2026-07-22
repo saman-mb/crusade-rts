@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Filesystem tests for MapFileIO (atomic save, backup, round-trip, mtime).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Writes under user:// which is always writable in headless CI; a unique BASE
@@ -8,10 +8,8 @@ const BASE := "user://test_map_file_io"
 const MISSING := "user://definitely_missing_xyz.json"
 const NESTED := "user://tmio_sub/deep/file.json"
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	var path := BASE + ".json"
 	_clean(path)
 
@@ -24,26 +22,8 @@ func _initialize() -> void:
 
 	_cleanup(path)
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-## Exact String equality check with message.
-func _s_eq(a: String, b: String, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 ## Removes a file if it exists (best-effort; ignores the result).
 func _rm(p: String) -> void:
