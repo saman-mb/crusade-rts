@@ -150,7 +150,7 @@ func _test_empty_space_termination() -> void:
 	var bounds := Rect2i(0, 0, 5, 5)  # 25 empty cells
 	var read := _make_read(grid)
 	# Caller captures the seed's identity: empty cell -> src -1, atlas (-1,-1).
-	var seed_id := read.call(Vector2i(2, 2))
+	var seed_id: Dictionary = read.call(Vector2i(2, 2))
 	var out := FloodFill.compute(
 		Vector2i(2, 2), seed_id["src"], seed_id["atlas"], bounds, read, _neighbors, 10000)
 
