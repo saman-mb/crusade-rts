@@ -10,10 +10,13 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to full commit SHAs (not mutable tags) so a
+      # compromised or moved tag cannot inject code into CI (#23). The trailing
+      # comment records the human-readable version each SHA corresponds to.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Godot
-        uses: chickensoft-games/setup-godot@v2
+        uses: chickensoft-games/setup-godot@f166999204a4f2722c6fe042fbaa3b3ea0d9c789 # v2.4.1
         with:
           version: 4.4.1
           use-dotnet: false
@@ -22,11 +25,19 @@ jobs:
       - name: Godot version
         run: godot --version
 
+      # Godot's --import can exit nonzero on benign import-time messages, so we
+      # can't assert its exit code directly (hence `|| true`). Instead we delete
+      # .godot first so the class cache is ALWAYS freshly regenerated — a stale
+      # or corrupt cache from a previous run can never slip past (#22).
       - name: Import project
-        run: timeout 300 godot --headless --path . --import || true
+        run: |
+          rm -rf .godot
+          timeout 300 godot --headless --path . --import || true
 
+      # `test -s` (exists AND non-empty), so a zero-byte cache from a broken
+      # import fails here rather than being treated as a successful build (#22).
       - name: Verify class cache
-        run: test -f .godot/global_script_class_cache.cfg || { echo "::error::global class cache missing after import"; exit 1; }
+        run: test -s .godot/global_script_class_cache.cfg || { echo "::error::global class cache missing or empty after import"; exit 1; }
 
       # Every suite prints a "PASS n / FAIL m" summary, so a naive `grep FAIL`
       # always matches. We match `FAIL: ` (a real failed assert line) or
