@@ -31,6 +31,8 @@ func _initialize() -> void:
 	_test_parse_valid()
 	_test_parse_corrupt()
 	_test_parse_non_object_root()
+	_test_parse_refuses_future_version()
+	_test_load_refuses_future_version(layers, layer0, sid, ts)
 	_test_clears_first(layers, layer0, sid, ts)
 	_test_migrate_path(layers, layer0, sid, ts)
 	_test_validate_drop(layers, layer0, sid, ts)
@@ -130,6 +132,35 @@ func _test_parse_corrupt() -> void:
 func _test_parse_non_object_root() -> void:
 	var res := MapLoader.parse("[1,2,3]")
 	_ok(res["ok"] == false, "parse non-object root -> ok false")
+
+## parse REFUSES a future schema_version (> CURRENT_SCHEMA): the migrator preserves
+## it (no downgrade) and parse returns ok=false with an explanatory message rather
+## than mis-reading a newer on-disk shape as current. (#39)
+func _test_parse_refuses_future_version() -> void:
+	var future := MapSchema.CURRENT_SCHEMA + 1
+	var res := MapLoader.parse('{"schema_version":%d,"layers":[]}' % future)
+	_ok(res["ok"] == false, "parse future version -> ok false")
+	_ok((res["error_message"] as String).length() > 0, "parse future version -> explanatory message")
+
+## A full load of a future-version doc refuses cleanly: ok=false, a diagnostic, and
+## crucially the target layers are left untouched (NOT cleared) since the refusal
+## happens before any layer mutation. (#39)
+func _test_load_refuses_future_version(layers: Array[TileMapLayer], layer0: TileMapLayer, sid: int, ts: TileSet) -> void:
+	# Pre-paint a sentinel; a refused load must not clear it.
+	layer0.set_cell(Vector2i(7, 7), sid, Vector2i(0, 0))
+	layer0.update_internals()
+	var future := MapSchema.CURRENT_SCHEMA + 1
+	var text := JSON.stringify({
+		MapSchema.KEY_SCHEMA_VERSION: future,
+		MapSchema.KEY_LAYERS: [_layer(0, [_cell(1, 1, sid, 0, 0)])],
+	})
+	var res := MapLoader.load_into_layers(text, layers, ts)
+	layer0.update_internals()
+	_ok(res["ok"] == false, "load future version -> ok false")
+	_ok((res["diagnostics"] as Array).size() >= 1, "load future version -> a diagnostic")
+	_i_eq(layer0.get_cell_source_id(Vector2i(7, 7)), sid, "refused load left layer untouched (not cleared)")
+	_i_eq(layer0.get_cell_source_id(Vector2i(1, 1)), -1, "refused load painted nothing")
+	layer0.clear()
 
 ## load_into_layers clears every target layer first: a stray pre-painted cell is gone
 ## and only the document's cell remains.

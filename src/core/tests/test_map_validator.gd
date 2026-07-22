@@ -21,6 +21,8 @@ func _initialize() -> void:
 	_test_validate_document(ts, sid)
 	_test_non_mutation(ts, sid)
 	_test_json_roundtrip(ts, sid)
+	_test_alternative_tile(ts, sid)
+	_test_required_root_keys(ts, sid)
 
 	print("PASS %d / FAIL %d" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -171,6 +173,49 @@ func _test_non_mutation(ts: TileSet, sid: int) -> void:
 	MapValidator.validate_document(doc, ts)
 	var orig_cells: Array = doc[MapSchema.KEY_LAYERS][0][MapSchema.KEY_CELLS]
 	_i_eq(orig_cells.size(), 3, "original doc untouched (deep copy)")
+
+## alt (alternative_tile): a nonzero alt must name an alternative the source owns.
+## A real alt passes; a nonexistent or negative alt is dropped; alt 0 (base) passes. (#44)
+func _test_alternative_tile(ts: TileSet, sid: int) -> void:
+	var src := ts.get_source(sid) as TileSetAtlasSource
+	var alt_id := src.create_alternative_tile(Vector2i(0, 0))  # a real alternative on (0,0)
+	_ok(alt_id > 0, "created a real alternative tile id (%d)" % alt_id)
+
+	var valid_alt := _cell(0, 0, sid, 0, 0)
+	valid_alt[MapSchema.KEY_CELL_ALT] = alt_id
+	_ok(MapValidator.valid_cell(valid_alt, ts), "cell with an existing alt is valid")
+
+	var bad_alt := _cell(0, 0, sid, 0, 0)
+	bad_alt[MapSchema.KEY_CELL_ALT] = alt_id + 999
+	_ok(not MapValidator.valid_cell(bad_alt, ts), "cell with a non-existent alt is invalid")
+
+	var neg_alt := _cell(0, 0, sid, 0, 0)
+	neg_alt[MapSchema.KEY_CELL_ALT] = -1
+	_ok(not MapValidator.valid_cell(neg_alt, ts), "negative alt is invalid")
+
+	var non_numeric_alt := _cell(0, 0, sid, 0, 0)
+	non_numeric_alt[MapSchema.KEY_CELL_ALT] = {"x": 1}
+	_ok(not MapValidator.valid_cell(non_numeric_alt, ts), "non-numeric alt is invalid (no coerce)")
+
+	# alt 0 / absent (the base tile) stays valid -- the common case.
+	var alt_zero := _cell(0, 0, sid, 0, 0)
+	alt_zero[MapSchema.KEY_CELL_ALT] = 0
+	_ok(MapValidator.valid_cell(alt_zero, ts), "explicit alt 0 (base tile) is valid")
+	_ok(MapValidator.valid_cell(_cell(0, 0, sid, 0, 0), ts), "absent alt defaults to base tile, valid")
+
+## validate_document enforces REQUIRED_ROOT_KEYS: a doc missing schema_version is
+## rejected even if 'layers' is fine; the helper mirrors that. (#41)
+func _test_required_root_keys(ts: TileSet, sid: int) -> void:
+	_ok(MapSchema.has_required_root_keys(
+		{MapSchema.KEY_SCHEMA_VERSION: MapSchema.CURRENT_SCHEMA, MapSchema.KEY_LAYERS: []}),
+		"has_required_root_keys true when both keys present")
+	_ok(not MapSchema.has_required_root_keys({MapSchema.KEY_LAYERS: []}),
+		"has_required_root_keys false without schema_version")
+	_ok(not MapSchema.has_required_root_keys(42), "has_required_root_keys false on non-dict")
+
+	var no_version := MapValidator.validate_document({MapSchema.KEY_LAYERS: []}, ts)
+	_ok(no_version["ok"] == false, "validate_document rejects a doc missing schema_version")
+	_ok((no_version["diagnostics"] as Array).size() >= 1, "missing-root-key doc yields a diagnostic")
 
 ## A JSON round-trip decodes coords as float; int() casts keep the cell valid.
 func _test_json_roundtrip(ts: TileSet, sid: int) -> void:

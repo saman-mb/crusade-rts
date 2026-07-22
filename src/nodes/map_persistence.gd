@@ -12,7 +12,7 @@ extends Node2D
 ## headless `--import` in CI.
 
 @export_group("Map Persistence")
-## The MapSystem whose elevation_layers are saved/loaded.
+## The MapSystem whose elevation stack + objects overlay are saved/loaded.
 @export var map_system_path: NodePath
 ## The target map file.
 @export var current_map_path: String = "user://maps/dev_map.json"
@@ -64,6 +64,15 @@ func _layers() -> Array[TileMapLayer]:
 	return empty
 
 
+## The MapSystem's Objects overlay layer, or null when unbound / absent. Duck-typed
+## (MapSystem carries no class_name); `get("objects_layer")` returns null rather
+## than erroring if an older scene has no such property.
+func _objects() -> TileMapLayer:
+	if _map_system == null:
+		return null
+	return _map_system.get("objects_layer") as TileMapLayer
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not OS.is_debug_build():
 		return
@@ -87,22 +96,16 @@ func _reload() -> void:
 	if not r["ok"]:
 		push_warning("reload: %s not found" % current_map_path)
 		return
-	var res := MapLoader.load_into_layers(r["text"], _layers(), _tile_set)
+	var res := MapLoader.load_map(r["text"], _layers(), _objects(), _tile_set)
 	print("[MapPersistence] reloaded %s (ok=%s, %d diagnostics)" % [current_map_path, res["ok"], (res["diagnostics"] as Array).size()])
 	_last_mtime = MapFileIO.modified_time(current_map_path)
 
 
-## Serializes the live elevation layers to JSON and writes them atomically.
+## Serializes the live elevation stack + objects overlay to JSON, atomically. (#43)
 func _save() -> void:
 	if _map_system == null:
 		return
-	var layers := _layers()
-	var names: Array[String] = []
-	var elevations: Array[int] = []
-	for i in layers.size():
-		names.append("elevation_%d" % i)
-		elevations.append(i)
-	var doc := MapSerializer.serialize_layers(layers, names, elevations)
+	var doc := MapSerializer.serialize_map(_layers(), _objects())
 	var ok := MapFileIO.save_text(current_map_path, MapSerializer.to_json(doc))
 	print("[MapPersistence] saved %s (ok=%s)" % [current_map_path, ok])
 	_last_mtime = MapFileIO.modified_time(current_map_path)

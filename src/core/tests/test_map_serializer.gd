@@ -31,9 +31,11 @@ func _initialize() -> void:
 
 	_test_root(doc)
 	_test_layer(doc)
+	_test_layer_kind_terrain(doc)
 	_test_cell(doc, sid)
 	_test_empty(empty)
 	_test_round_trip(doc)
+	_test_serialize_map(ts, sid)
 
 	layer.queue_free()
 	empty.queue_free()
@@ -124,6 +126,57 @@ func _test_cell(doc: Dictionary, sid: int) -> void:
 	_i_eq(cell[MapSchema.KEY_CELL_SOURCE], sid, "cell [3,5] source == sid")
 	_v_eq(cell[MapSchema.KEY_CELL_ATLAS], [0, 0], "cell [3,5] atlas == [0, 0]")
 	_i_eq(cell[MapSchema.KEY_CELL_ALT], 0, "cell [3,5] alt == 0")
+
+## serialize_layers now tags every entry kind=terrain so the loader routes them by
+## elevation. (#43)
+func _test_layer_kind_terrain(doc: Dictionary) -> void:
+	var layer0: Dictionary = doc[MapSchema.KEY_LAYERS][0]
+	_ok(layer0.has(MapSchema.KEY_LAYER_KIND), "terrain entry carries a kind field")
+	_ok(String(layer0[MapSchema.KEY_LAYER_KIND]) == MapSchema.LAYER_KIND_TERRAIN, "terrain entry kind == terrain")
+
+## serialize_map emits terrain entries keyed by elevation index PLUS a single
+## objects entry (kind=objects at the OBJECTS_ELEVATION sentinel). A null objects
+## layer yields a terrain-only document with no objects entry. (#43)
+func _test_serialize_map(ts: TileSet, sid: int) -> void:
+	var e0 := TileMapLayer.new()
+	e0.tile_set = ts
+	root.add_child(e0)
+	var e1 := TileMapLayer.new()
+	e1.tile_set = ts
+	root.add_child(e1)
+	var obj := TileMapLayer.new()
+	obj.tile_set = ts
+	root.add_child(obj)
+	e0.set_cell(Vector2i(0, 0), sid, Vector2i(0, 0), 0)
+	obj.set_cell(Vector2i(5, 5), sid, Vector2i(0, 0), 0)
+
+	var elev: Array[TileMapLayer] = [e0, e1]
+	var doc := MapSerializer.serialize_map(elev, obj)
+	var entries: Array = doc[MapSchema.KEY_LAYERS]
+	_i_eq(entries.size(), 3, "serialize_map: 2 terrain + 1 objects == 3 entries")
+
+	# Terrain entries: kind=terrain, elevation == index.
+	_ok(String(entries[0][MapSchema.KEY_LAYER_KIND]) == MapSchema.LAYER_KIND_TERRAIN, "entry[0] kind terrain")
+	_i_eq(int(entries[0][MapSchema.KEY_LAYER_ELEVATION]), 0, "entry[0] elevation 0")
+	_i_eq(int(entries[1][MapSchema.KEY_LAYER_ELEVATION]), 1, "entry[1] elevation 1")
+
+	# Objects entry: kind=objects, name=objects, elevation=OBJECTS_ELEVATION sentinel.
+	var obj_entry: Dictionary = entries[2]
+	_ok(String(obj_entry[MapSchema.KEY_LAYER_KIND]) == MapSchema.LAYER_KIND_OBJECTS, "objects entry kind objects")
+	_ok(String(obj_entry[MapSchema.KEY_LAYER_NAME]) == MapSchema.LAYER_NAME_OBJECTS, "objects entry name objects")
+	_i_eq(int(obj_entry[MapSchema.KEY_LAYER_ELEVATION]), MapSchema.OBJECTS_ELEVATION, "objects entry at OBJECTS_ELEVATION")
+	_i_eq(int(obj_entry[MapSchema.KEY_CELLS].size()), 1, "objects entry carries its 1 cell")
+
+	# Null objects layer -> terrain-only, no objects entry.
+	var doc2 := MapSerializer.serialize_map(elev, null)
+	var entries2: Array = doc2[MapSchema.KEY_LAYERS]
+	_i_eq(entries2.size(), 2, "serialize_map(null objects): terrain-only, 2 entries")
+	for entry in entries2:
+		_ok(String(entry[MapSchema.KEY_LAYER_KIND]) != MapSchema.LAYER_KIND_OBJECTS, "no objects entry when objects layer null")
+
+	e0.queue_free()
+	e1.queue_free()
+	obj.queue_free()
 
 ## A layer with no painted cells serializes to an empty Array.
 func _test_empty(empty: TileMapLayer) -> void:

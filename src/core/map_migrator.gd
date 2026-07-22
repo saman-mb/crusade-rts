@@ -9,8 +9,10 @@ extends RefCounted
 ##
 ## Guarantees:
 ##  - Non-mutating: the caller's Dictionary is deep-copied first, never touched.
-##  - Monotonic: the returned document's schema_version is always CURRENT_SCHEMA,
-##    regardless of the input version (a missing version is treated as v0).
+##  - Monotonic UP to CURRENT_SCHEMA: a document at or below CURRENT_SCHEMA comes
+##    back stamped CURRENT_SCHEMA (a missing version is treated as v0). A FUTURE
+##    version (> CURRENT_SCHEMA) is returned untouched, version preserved, so the
+##    loader can refuse it rather than mis-labeling a newer shape as current (#39).
 ##  - Idempotent: migrating an already-current document changes nothing meaningful.
 ##
 ## Call order for the loader (#5):
@@ -23,6 +25,11 @@ extends RefCounted
 static func migrate(doc: Dictionary) -> Dictionary:
 	var out: Dictionary = doc.duplicate(true)
 	var v := int(out.get(MapSchema.KEY_SCHEMA_VERSION, 0))  ## missing version treated as v0.
+	# We can only migrate UP. A version above CURRENT_SCHEMA is a newer, unknown
+	# shape we must not touch or relabel -- return it as-is (version preserved) so
+	# the loader can detect and refuse it. (#39)
+	if v > MapSchema.CURRENT_SCHEMA:
+		return out
 	if v < 1:
 		out = _v0_to_v1(out)
 	if v < 2:
