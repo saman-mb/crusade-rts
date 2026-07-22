@@ -77,6 +77,27 @@ godotengine/godot#65963, already re-centers it). For **taller** art — props wh
 rect extends above the diamond — shift `texture_origin.y` by `-REGION_SIZE.y / 2`
 to re-anchor the visual base onto the diamond (see issue #29).
 
+## Normal map (lighting)
+
+For dynamic lighting (epic #66), a tangent-space **normal map** is derived from
+the diffuse atlas so `Light2D` shades the diamonds with surface relief instead of
+flat-brightening. It is generated, not hand-authored:
+
+```
+python3 tools/gen_normal_atlas.py    # -> assets/tilesets/terrain_atlas_n.png
+```
+
+`gen_normal_atlas.py` (L1 / #82) computes per-texel normals from diffuse
+luminance, **region-aware**: each 128×64 region is processed in isolation so
+gradients never bleed across the zero-separation region borders, texels outside
+the diamond (low diffuse alpha) are forced neutral `(128,128,255)`, and each
+region's 1px border is neutralised. A flat region therefore encodes uniform
+`(128,128,255)`. The output (`terrain_atlas_n.png`, `512×320` RGB) is a **CC0
+derivative** of the CC0 diffuse atlas. Invariants are covered by
+`tools/test_gen_normal_atlas.py` (run manually — Python tools are outside the
+Godot CI test glob). Wiring the normal map into the TileSet + the sun is L3
+(#84); `--invert-y` is available if Godot wants the green channel flipped.
+
 ## Import / filtering
 
 The atlas relies on the project-global `default_texture_filter = 1` (Linear, no
