@@ -56,6 +56,7 @@ func _initialize() -> void:
 	_test_walkable_query(layer0, painted0, hole, way_off)
 	_test_null_guards(layer0, layer1)
 	_test_cross_tier_path(layer0, layer1, painted0, painted1)
+	_test_intra_tier_hole_blocks(layer0, layer1)
 	_test_from_map_system(layer0, layer1, painted0, painted1)
 
 	layer0.queue_free()
@@ -159,6 +160,17 @@ func _test_cross_tier_path(layer0: TileMapLayer, layer1: TileMapLayer, painted0:
 	var graph_no_ramp := NavMapBuilder.build([layer0, layer1], [])
 	var blocked := graph_no_ramp.find_path(painted0, 0, painted1, 1)
 	_ok(blocked.is_empty(), "cross-tier find_path is [] with no ramps")
+
+## Intra-tier hole-blocks through the ADAPTER (#62): tier 0 is painted at
+## x in {0,1,2,5,6} with an unpainted cliff gap at x in {3,4}. A same-tier path
+## from the left segment to the right segment must be [] (the hole is a hard wall
+## and there is no ramp detour), while a path within one segment still routes.
+func _test_intra_tier_hole_blocks(layer0: TileMapLayer, layer1: TileMapLayer) -> void:
+	var graph := NavMapBuilder.build([layer0, layer1], [])
+	var across := graph.find_path(Vector2i(0, 0), 0, Vector2i(6, 0), 0)
+	_ok(across.is_empty(), "adapter: same-tier path across the hole gap is []")
+	var within := graph.find_path(Vector2i(0, 0), 0, Vector2i(2, 0), 0)
+	_ok(not within.is_empty(), "adapter: same-tier path within the left segment routes")
 
 ## from_map_system reads a duck-typed stand-in and produces a NavGraph
 ## equivalent to build(): same region and the same cross-tier path. Covers both
