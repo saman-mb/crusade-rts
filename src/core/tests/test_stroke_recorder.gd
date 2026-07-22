@@ -45,7 +45,12 @@ func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
 ## cell (the -1 sentinel). Returns -1 / (-1,-1) for never-written cells.
 class Grid extends RefCounted:
 	var cells: Dictionary = {}
+	## Counts sink invocations so a test can distinguish execute=false (no call on
+	## commit) from a spurious re-execution -- state alone can't, since set_cell is
+	## idempotent. (#56)
+	var calls: int = 0
 	func set_cell(cell: Vector2i, src: int, atlas: Vector2i) -> void:
+		calls += 1
 		cells[cell] = { "src": src, "atlas": atlas }
 	func src_at(cell: Vector2i) -> int:
 		return cells[cell]["src"] if cells.has(cell) else -1
@@ -162,9 +167,15 @@ func _test_undo_redo_batch() -> void:
 	grid.set_cell(Vector2i(3, 0), -1, Vector2i(-1, -1))
 
 	var ur := UndoRedo.new()
+	# Reset the sink counter so we measure ONLY invocations from commit/undo/redo,
+	# not the live pre-apply above. (#56)
+	grid.calls = 0
 	r.commit(ur, "Paint stroke", Callable(grid, "set_cell"))
 
-	# execute=false: commit must NOT have re-applied (grid still holds pre-applied AFTER).
+	# DISCRIMINATING execute=false check: commit must invoke the sink ZERO times.
+	# The grid already holds AFTER (pre-applied live), so a wrong execute=true would
+	# leave identical STATE -- only the call count distinguishes the two. (#56)
+	_i_eq(grid.calls, 0, "commit(execute=false) did not invoke the sink")
 	_ok(ur.has_undo(), "committed stroke created an undoable action")
 	_i_eq(grid.src_at(Vector2i(1, 0)), 2, "after commit: paint cell holds AFTER")
 	_i_eq(grid.src_at(Vector2i(2, 0)), 7, "after commit: repaint cell holds AFTER")
@@ -172,6 +183,7 @@ func _test_undo_redo_batch() -> void:
 
 	# ONE undo reverts ALL THREE cells to their BEFORE state (one commit = one step).
 	ur.undo()
+	_i_eq(grid.calls, 3, "undo invoked the sink once per changed cell (3)")
 	_i_eq(grid.src_at(Vector2i(1, 0)), -1, "undo: paint cell back to empty (-1)")
 	_i_eq(grid.src_at(Vector2i(2, 0)), 5, "undo: repaint cell back to 5")
 	_v_eq(grid.atlas_at(Vector2i(2, 0)), Vector2i(0, 0), "undo: repaint cell atlas back to (0,0)")
@@ -181,6 +193,7 @@ func _test_undo_redo_batch() -> void:
 
 	# ONE redo re-applies ALL THREE cells to their AFTER state.
 	ur.redo()
+	_i_eq(grid.calls, 6, "redo invoked the sink once per changed cell again (total 6)")
 	_i_eq(grid.src_at(Vector2i(1, 0)), 2, "redo: paint cell AFTER again")
 	_i_eq(grid.src_at(Vector2i(2, 0)), 7, "redo: repaint cell AFTER again")
 	_i_eq(grid.src_at(Vector2i(3, 0)), -1, "redo: erased cell cleared again (-1)")
