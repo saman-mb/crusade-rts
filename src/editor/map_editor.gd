@@ -46,6 +46,8 @@ var _has_preview: bool = false
 var _painting: bool = false
 ## True while a right-mouse erase drag is active.
 var _erasing: bool = false
+## When false, the brush ignores all input (Play mode / menu open). The DevMenu flips this.
+var editing_enabled: bool = true
 
 
 func _ready() -> void:
@@ -87,6 +89,21 @@ func _setup() -> void:
 	_set_active_level(0)
 
 
+## Re-binds a swapped-in TileSet: assigns it to every elevation layer + the preview
+## and re-derives the cached source id, so the brush and hover ghost stay valid after
+## the DevMenu switches tilesets live (Story #6).
+func rebind_tileset(ts: TileSet) -> void:
+	if ts == null:
+		return
+	for i in _layer_count():
+		var layer := _map_system.get_elevation_layer(i) as TileMapLayer
+		if layer != null:
+			layer.tile_set = ts
+	if _preview != null:
+		_preview.tile_set = ts
+	_source_id = ts.get_source_id(0)
+
+
 ## Selects the active elevation tier (clamped to the available layers), rebinds
 ## the active layer, and lifts the preview to that tier's elevation offset.
 func _set_active_level(level: int) -> void:
@@ -108,6 +125,8 @@ func _layer_count() -> int:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not editing_enabled:
+		return
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton
 		match button.button_index:

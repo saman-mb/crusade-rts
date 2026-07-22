@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3 uid="uid://crusademapsys01"]
+[gd_scene load_steps=6 format=3 uid="uid://crusademapsys01"]
 
 [ext_resource type="Script" path="res://src/nodes/map_system.gd" id="1_mapsys"]
 [ext_resource type="PackedScene" uid="uid://crusadertscam01" path="res://src/nodes/rts_camera.tscn" id="2_rtscam"]
 [ext_resource type="PackedScene" uid="uid://crusademapedit01" path="res://src/editor/map_editor.tscn" id="3_mapedit"]
 [ext_resource type="Script" path="res://src/nodes/map_persistence.gd" id="4_mappersist"]
+[ext_resource type="PackedScene" uid="uid://crusadedevmenu01" path="res://src/ui/dev_menu.tscn" id="5_devmenu"]
 
 [node name="MapSystem" type="Node2D"]
 y_sort_enabled = true
@@ -32,4 +33,7 @@ map_system_path = NodePath("..")
 
 [node name="MapPersistence" type="Node2D" parent="."]
 script = ExtResource("4_mappersist")
+map_system_path = NodePath("..")
+
+[node name="DevMenu" parent="." instance=ExtResource("5_devmenu")]
 map_system_path = NodePath("..")
