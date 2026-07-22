@@ -36,6 +36,13 @@ const UNDO_HISTORY := 64
 const FILL_MARGIN := 4
 ## Hard cap on a single bucket-fill region size -- a safety valve against runaway fills.
 const FILL_MAX_CELLS := 4096
+## Ceiling on the contiguous elevation-layer probe in `_layer_count()` -- a safety
+## bound so the count loop can never run away if a map ever exposes an unbounded or
+## erroring layer accessor.
+const ELEVATION_PROBE_CAP := 16
+## Corner mask of the fully-filled dual-grid tile (TL|TR|BL|BR = 1|2|4|8 = 15). Its
+## `TileSetConstants.LOOKUP` entry -- Vector2i(3, 3) -- is the editor's default brush.
+const FILLED_TILE_MASK := 15
 
 ## The resolved MapSystem node. Left UNTYPED on purpose so its
 ## `get_elevation_layer()` / `elevation_layers` API is duck-typed: MapSystem
@@ -48,9 +55,10 @@ var _active_level: int = 0
 var _active_layer: TileMapLayer
 ## Atlas source id of the built terrain TileSet.
 var _source_id: int = -1
-## Default terrain atlas coord to paint: the fully-filled dual-grid mask (15)
-## cell Vector2i(3, 3), a real tile created by TileSetBuilder.
-var _atlas_coords: Vector2i = Vector2i(3, 3)
+## Default terrain atlas coord to paint: the fully-filled dual-grid mask's tile,
+## sourced from the single-source-of-truth LOOKUP table (== Vector2i(3, 3)) rather
+## than duplicating the literal here.
+var _atlas_coords: Vector2i = TileSetConstants.LOOKUP[FILLED_TILE_MASK]
 ## Translucent ghost layer that previews the cell under the cursor.
 @onready var _preview: TileMapLayer = $Preview
 ## Cell currently holding the preview tile.
@@ -106,10 +114,10 @@ func _setup() -> void:
 
 	_source_id = ts.get_source_id(0)
 
-	# Translucent ghost; explicit LINEAR filter matches the HD art and avoids the
-	# blurry-nearest ghost artefact of godot issue #52332.
-	_preview.modulate = Color(1, 1, 1, 0.5)
-	_preview.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	# The ghost's translucency (modulate alpha 0.5) and explicit LINEAR texture_filter
+	# -- which matches the HD art and avoids the blurry-nearest ghost artefact of godot
+	# issue #52332 -- live on map_editor.tscn's Preview node, the single home for that
+	# config (it was previously duplicated here).
 
 	_set_active_level(0)
 
@@ -135,14 +143,16 @@ func _set_active_level(level: int) -> void:
 	_active_level = BrushCore.clamp_level(level, _layer_count())
 	_active_layer = _map_system.get_elevation_layer(_active_level) as TileMapLayer
 	_preview.position = MapConstants.elevation_offset(_active_level)
-	if _active_layer == null:
-		return
 
 
 ## Counts the contiguous non-null elevation layers from level 0 (probe capped).
+## Returns 0 when the editor is inert (`_map_system` unresolved), so every caller
+## -- including rebind_tileset()'s layer loop -- stays null-safe.
 func _layer_count() -> int:
+	if _map_system == null:
+		return 0
 	var count := 0
-	for i in range(16):
+	for i in range(ELEVATION_PROBE_CAP):
 		if _map_system.get_elevation_layer(i) == null:
 			break
 		count += 1
@@ -151,6 +161,11 @@ func _layer_count() -> int:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not editing_enabled:
+		return
+	# Inert editor (map_system_path unresolved): the mouse handlers already no-op on a
+	# null _active_layer, but the key handlers reach _layer_count()/_set_active_level(),
+	# which dereference _map_system -- so bail here to keep those paths crash-safe. (#35)
+	if _map_system == null:
 		return
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton
@@ -161,17 +176,18 @@ func _unhandled_input(event: InputEvent) -> void:
 					# fresh stroke would orphan the erase's cells (no undo entry).
 					if _erasing:
 						return
-					# Dispatch on the active tool. Only PAINT starts a drag stroke;
-					# eyedropper reads, bucket is a one-shot fill (both are self-contained).
-					match _tool.tool:
-						ToolState.Tool.PAINT:
-							_stroke = StrokeRecorder.new()
-							_painting = true
-							_apply_at_mouse(BrushCore.Mode.PAINT)  # records the first cell
-						ToolState.Tool.EYEDROPPER:
-							_eyedrop_at_mouse()
-						ToolState.Tool.BUCKET:
-							_bucket_fill_at_mouse()
+					# Dispatch via the tested ToolState predicates (single source of
+					# truth) rather than re-deriving per-tool behavior inline: PAINT is
+					# the only stroke tool; BUCKET is the other mutating tool (a one-shot
+					# fill); EYEDROPPER is the read-only remainder. (#55)
+					if _tool.creates_stroke():
+						_stroke = StrokeRecorder.new()
+						_painting = true
+						_apply_at_mouse(BrushCore.Mode.PAINT)  # records the first cell
+					elif _tool.is_mutating():
+						_bucket_fill_at_mouse()
+					else:
+						_eyedrop_at_mouse()
 				else:
 					_end_stroke("Paint", _painting)
 					_painting = false
