@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Runtime tests that drive FloodFill against a REAL Godot 4.4 TileMapLayer + TileSet.
 ## Requires a Godot 4.4 runtime; authored + statically checked now, executed once a binary
 ## is available: godot --headless --script <this file>. Proves that compute() integrates with
@@ -9,10 +9,8 @@ extends SceneTree
 ##   set_cell(coords, source_id := -1, atlas_coords := Vector2i(-1,-1), alternative := 0)
 ##   get_cell_source_id(coords); get_cell_atlas_coords(coords); get_surrounding_cells(coords).
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	var ts := _build_tileset()
 	var source_id := ts.get_source_id(0)
 	var atlas_a := Vector2i(0, 0)  ## tile (0,0) created below -> valid cell.
@@ -33,22 +31,8 @@ func _initialize() -> void:
 
 	layer.queue_free()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
 
 ## Minimal isometric DIAMOND_DOWN TileSet with two valid atlas tiles (0,0) and (1,0),
 ## backed by an in-memory ImageTexture (no GPU/atlas-file dependency). Mirrors the headless

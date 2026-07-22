@@ -1,30 +1,12 @@
-extends SceneTree
+extends GdTest
 ## Headless tests for DevTheme: assert `build()` returns a fully-configured Theme
 ## with the key style tokens applied (no Node/GPU deps; constructs the Theme in
 ## memory). Run: godot --headless --script <this file>.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_build()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
-
-# --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
 
 # --- tests ---
 

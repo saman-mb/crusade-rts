@@ -1,35 +1,18 @@
-extends SceneTree
+extends GdTest
 ## Integration tests for NavPortalGraph over real NavTierGrids. Verifies: ramp
 ## endpoints become AStar2D points; ramps are the ONLY cross-tier edges (with the
 ## climb weight applied to the high endpoint); same-tier endpoints connect only
 ## when the tier grid reports reachability; endpoint_info / endpoints_on_tier /
 ## portal positions are correct. Runner: godot --headless --script <this file>.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_portal_graph()
 	_test_split_tier_non_reachable()
 	_test_shared_high_endpoint_weight()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 func _v2_eq(a: Vector2, b: Vector2, msg: String) -> void:
 	_ok(a.is_equal_approx(b), "%s: expected %s got %s" % [msg, b, a])

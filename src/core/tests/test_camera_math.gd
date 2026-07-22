@@ -1,13 +1,11 @@
-extends SceneTree
+extends GdTest
 ## Pure-math tests for CameraMath (no Camera2D / Node deps required).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Proves frame-rate-independent smoothing, zoom-invariant panning, edge-pan
 ## ramps, zoom clamping/anchoring, and target clamping against map bounds.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_smoothing_weight()
 	_test_frame_rate_invariance()
 	_test_keyboard_pan_zoom_invariance()
@@ -16,21 +14,11 @@ func _initialize() -> void:
 	_test_edge_pan_ramp()
 	_test_world_bounds_for_cells()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
 
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _check(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
 ## Approximate Vector2 equality via distance.
-func _v_eq(a: Vector2, b: Vector2) -> bool:
+func _v_approx(a: Vector2, b: Vector2) -> bool:
 	return a.distance_to(b) < 0.001
 
 ## Approximate float equality.
@@ -49,21 +37,21 @@ func _test_smoothing_weight() -> void:
 		# Every sampled weight must sit in the closed unit interval.
 		for delta in deltas:
 			var w := CameraMath.smoothing_weight(decay, delta)
-			_check(w >= 0.0 and w <= 1.0, "smoothing_weight(%s,%s)=%s in [0,1]" % [decay, delta, w])
+			_ok(w >= 0.0 and w <= 1.0, "smoothing_weight(%s,%s)=%s in [0,1]" % [decay, delta, w])
 
 		# delta == 0 means "no time passed" => no movement.
-		_check(_f_eq(CameraMath.smoothing_weight(decay, 0.0), 0.0), "smoothing_weight(%s,0)=0" % decay)
+		_ok(_f_eq(CameraMath.smoothing_weight(decay, 0.0), 0.0), "smoothing_weight(%s,0)=0" % decay)
 
 		# Monotonic non-decreasing in delta for fixed decay.
 		var prev := -1.0
 		for delta in deltas:
 			var w := CameraMath.smoothing_weight(decay, delta)
-			_check(w >= prev - 0.000001, "smoothing_weight monotonic in delta (decay %s, delta %s)" % [decay, delta])
+			_ok(w >= prev - 0.000001, "smoothing_weight monotonic in delta (decay %s, delta %s)" % [decay, delta])
 			prev = w
 
 	# Large decay*delta => within (0,1], approaching 1.
 	var big := CameraMath.smoothing_weight(20.0, 1.0)
-	_check(big > 0.99 and big <= 1.0, "large decay*delta weight approaches 1 (got %s)" % big)
+	_ok(big > 0.99 and big <= 1.0, "large decay*delta weight approaches 1 (got %s)" % big)
 
 ## THE MARQUEE PROPERTY: exponential decay composes, so 30fps and 144fps land
 ## in the same place. Decaying current->target over N sub-steps of T/N yields the
@@ -82,7 +70,7 @@ func _test_frame_rate_invariance() -> void:
 			var v := a
 			for i in range(n):
 				v = CameraMath.decay_vec2(v, b, decay, t / float(n))
-			_check(_v_eq(one_shot, v), "decay invariance decay=%s N=%s (one_shot %s vs %s)" % [decay, n, one_shot, v])
+			_ok(_v_approx(one_shot, v), "decay invariance decay=%s N=%s (one_shot %s vs %s)" % [decay, n, one_shot, v])
 
 ## Panning must feel the same at every zoom: world_delta * zoom (the on-screen
 ## displacement) is identical across zooms, and a diagonal never travels farther
@@ -94,13 +82,13 @@ func _test_keyboard_pan_zoom_invariance() -> void:
 	var d_far := CameraMath.keyboard_pan_delta(Vector2(1.0, 0.0), pan_speed, 2.5, delta)
 
 	# On-screen displacement = world_delta * zoom must match across zooms.
-	_check(_f_eq(d_near.x * 0.5, d_far.x * 2.5), "pan on-screen dx zoom-invariant (%s vs %s)" % [d_near.x * 0.5, d_far.x * 2.5])
-	_check(_f_eq(d_near.y * 0.5, d_far.y * 2.5), "pan on-screen dy zoom-invariant (%s vs %s)" % [d_near.y * 0.5, d_far.y * 2.5])
+	_ok(_f_eq(d_near.x * 0.5, d_far.x * 2.5), "pan on-screen dx zoom-invariant (%s vs %s)" % [d_near.x * 0.5, d_far.x * 2.5])
+	_ok(_f_eq(d_near.y * 0.5, d_far.y * 2.5), "pan on-screen dy zoom-invariant (%s vs %s)" % [d_near.y * 0.5, d_far.y * 2.5])
 
 	# Diagonal (unit-length) world delta must not exceed a cardinal unit input.
 	var straight := CameraMath.keyboard_pan_delta(Vector2(1.0, 0.0), pan_speed, 1.0, delta).length()
 	var diagonal := CameraMath.keyboard_pan_delta(Vector2(1.0, 1.0).normalized(), pan_speed, 1.0, delta).length()
-	_check(diagonal <= straight + 0.001, "diagonal pan <= cardinal pan (%s <= %s)" % [diagonal, straight])
+	_ok(diagonal <= straight + 0.001, "diagonal pan <= cardinal pan (%s <= %s)" % [diagonal, straight])
 
 ## Zoom steps accumulate but never escape [zoom_min, zoom_max]; a step past a
 ## bound clamps exactly to that bound.
@@ -113,24 +101,24 @@ func _test_zoom_step_and_clamp() -> void:
 	var z := 1.0
 	for i in range(20):
 		z = CameraMath.step_zoom(z, 1, step, zmin, zmax)
-		_check(z <= zmax + 0.000001, "step_zoom up stays <= max (iter %s got %s)" % [i, z])
-	_check(_f_eq(z, zmax), "step_zoom up saturates to max (got %s)" % z)
+		_ok(z <= zmax + 0.000001, "step_zoom up stays <= max (iter %s got %s)" % [i, z])
+	_ok(_f_eq(z, zmax), "step_zoom up saturates to max (got %s)" % z)
 
 	# Ratchet down 20 times: never below min.
 	z = 1.0
 	for i in range(20):
 		z = CameraMath.step_zoom(z, -1, step, zmin, zmax)
-		_check(z >= zmin - 0.000001, "step_zoom down stays >= min (iter %s got %s)" % [i, z])
-	_check(_f_eq(z, zmin), "step_zoom down saturates to min (got %s)" % z)
+		_ok(z >= zmin - 0.000001, "step_zoom down stays >= min (iter %s got %s)" % [i, z])
+	_ok(_f_eq(z, zmin), "step_zoom down saturates to min (got %s)" % z)
 
 	# One step from just inside a bound clamps exactly onto the bound.
-	_check(_f_eq(CameraMath.step_zoom(2.4, 1, step, zmin, zmax), zmax), "step_zoom past max clamps to max")
-	_check(_f_eq(CameraMath.step_zoom(0.6, -1, step, zmin, zmax), zmin), "step_zoom past min clamps to min")
+	_ok(_f_eq(CameraMath.step_zoom(2.4, 1, step, zmin, zmax), zmax), "step_zoom past max clamps to max")
+	_ok(_f_eq(CameraMath.step_zoom(0.6, -1, step, zmin, zmax), zmin), "step_zoom past min clamps to min")
 
 	# clamp_zoom is a plain clamp.
-	_check(_f_eq(CameraMath.clamp_zoom(3.0, zmin, zmax), zmax), "clamp_zoom(3.0)=2.5")
-	_check(_f_eq(CameraMath.clamp_zoom(0.1, zmin, zmax), zmin), "clamp_zoom(0.1)=0.5")
-	_check(_f_eq(CameraMath.clamp_zoom(1.25, zmin, zmax), 1.25), "clamp_zoom in-range unchanged")
+	_ok(_f_eq(CameraMath.clamp_zoom(3.0, zmin, zmax), zmax), "clamp_zoom(3.0)=2.5")
+	_ok(_f_eq(CameraMath.clamp_zoom(0.1, zmin, zmax), zmin), "clamp_zoom(0.1)=0.5")
+	_ok(_f_eq(CameraMath.clamp_zoom(1.25, zmin, zmax), 1.25), "clamp_zoom in-range unchanged")
 
 ## The camera target stays inside the map bounds inset by half the on-screen view
 ## (viewport/2/zoom). When the view is larger than the map, target locks to center.
@@ -146,21 +134,21 @@ func _test_clamp_target_position() -> void:
 
 	# Far outside the top-left corner: both axes clamp to the near inset edges.
 	var corner := CameraMath.clamp_target_position(Vector2(-5000.0, -5000.0), bounds, viewport, zoom)
-	_check(_v_eq(corner, Vector2(min_x, min_y)), "corner clamps to (%s,%s) got %s" % [min_x, min_y, corner])
+	_ok(_v_approx(corner, Vector2(min_x, min_y)), "corner clamps to (%s,%s) got %s" % [min_x, min_y, corner])
 
 	# Far outside the bottom-right corner: clamps to the far inset edges.
 	var corner2 := CameraMath.clamp_target_position(Vector2(99999.0, 99999.0), bounds, viewport, zoom)
-	_check(_v_eq(corner2, Vector2(max_x, max_y)), "far corner clamps to (%s,%s) got %s" % [max_x, max_y, corner2])
+	_ok(_v_approx(corner2, Vector2(max_x, max_y)), "far corner clamps to (%s,%s) got %s" % [max_x, max_y, corner2])
 
 	# A point already inside the inset box is untouched.
 	var inside := Vector2(2000.0, 1500.0)
 	var kept := CameraMath.clamp_target_position(inside, bounds, viewport, zoom)
-	_check(_v_eq(kept, inside), "interior target unchanged got %s" % kept)
+	_ok(_v_approx(kept, inside), "interior target unchanged got %s" % kept)
 
 	# Degenerate bounds smaller than the view: no valid inset => lock to midpoint.
 	var tiny := Rect2(0.0, 0.0, 100.0, 100.0)
 	var mid := CameraMath.clamp_target_position(Vector2(9999.0, -9999.0), tiny, viewport, zoom)
-	_check(_v_eq(mid, Vector2(50.0, 50.0)), "degenerate bounds -> midpoint (50,50) got %s" % mid)
+	_ok(_v_approx(mid, Vector2(50.0, 50.0)), "degenerate bounds -> midpoint (50,50) got %s" % mid)
 
 ## Edge panning ramps linearly from the zone's inner boundary (0) to the screen
 ## edge (full speed), on all four sides.
@@ -172,25 +160,25 @@ func _test_edge_pan_ramp() -> void:
 
 	# Dead center: no movement.
 	var center := CameraMath.edge_pan_velocity(Vector2(500.0, 500.0), viewport, edge_fraction, edge_speed)
-	_check(_v_eq(center, Vector2.ZERO), "edge pan center = (0,0) got %s" % center)
+	_ok(_v_approx(center, Vector2.ZERO), "edge pan center = (0,0) got %s" % center)
 
 	# Left edge (x=0): full negative x velocity.
 	var left := CameraMath.edge_pan_velocity(Vector2(0.0, 500.0), viewport, edge_fraction, edge_speed)
-	_check(abs(left.x - (-edge_speed)) < tol, "left edge vx ~ -edge_speed got %s" % left.x)
-	_check(abs(left.y) < tol, "left edge vy ~ 0 got %s" % left.y)
+	_ok(abs(left.x - (-edge_speed)) < tol, "left edge vx ~ -edge_speed got %s" % left.x)
+	_ok(abs(left.y) < tol, "left edge vy ~ 0 got %s" % left.y)
 
 	# Zone midpoint (x=25): half negative x velocity.
 	var half := CameraMath.edge_pan_velocity(Vector2(25.0, 500.0), viewport, edge_fraction, edge_speed)
-	_check(abs(half.x - (-0.5 * edge_speed)) < tol, "zone midpoint vx ~ -0.5*edge_speed got %s" % half.x)
+	_ok(abs(half.x - (-0.5 * edge_speed)) < tol, "zone midpoint vx ~ -0.5*edge_speed got %s" % half.x)
 
 	# Inner boundary (x=50): velocity fades to ~0.
 	var inner := CameraMath.edge_pan_velocity(Vector2(50.0, 500.0), viewport, edge_fraction, edge_speed)
-	_check(abs(inner.x) < tol, "inner boundary vx ~ 0 got %s" % inner.x)
+	_ok(abs(inner.x) < tol, "inner boundary vx ~ 0 got %s" % inner.x)
 
 	# Bottom-right corner: full positive velocity on both axes.
 	var br := CameraMath.edge_pan_velocity(Vector2(1000.0, 1000.0), viewport, edge_fraction, edge_speed)
-	_check(abs(br.x - edge_speed) < tol, "corner vx ~ +edge_speed got %s" % br.x)
-	_check(abs(br.y - edge_speed) < tol, "corner vy ~ +edge_speed got %s" % br.y)
+	_ok(abs(br.x - edge_speed) < tol, "corner vx ~ +edge_speed got %s" % br.x)
+	_ok(abs(br.y - edge_speed) < tol, "corner vy ~ +edge_speed got %s" % br.y)
 
 ## world_bounds_for_cells projects a block of painted cells to the world-space
 ## AABB that RtsCamera clamps against (#17). It must match the diamond extents of
@@ -201,31 +189,31 @@ func _test_world_bounds_for_cells() -> void:
 
 	# Empty region => empty Rect2 (RtsCamera treats zero area as unbounded).
 	var empty := CameraMath.world_bounds_for_cells(Rect2i(0, 0, 0, 0), ts, 3)
-	_check(empty.size == Vector2.ZERO, "blank map -> unbounded sentinel got %s" % empty)
+	_ok(empty.size == Vector2.ZERO, "blank map -> unbounded sentinel got %s" % empty)
 
 	# 2x2 block at origin, no pad. Hand-derived from the four corner diamonds:
 	# left vertex of (0,1) at x=-64, right vertex of (1,0) at x=192, top of (0,0)
 	# at y=0, bottom of (1,1) at y=128.
 	var b := CameraMath.world_bounds_for_cells(Rect2i(0, 0, 2, 2), ts, 0)
-	_check(b == Rect2(-64.0, 0.0, 256.0, 128.0), "2x2 origin block AABB got %s" % b)
+	_ok(b == Rect2(-64.0, 0.0, 256.0, 128.0), "2x2 origin block AABB got %s" % b)
 
 	# Every painted diamond's bounding box must sit inside the reported bounds.
 	for cell in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
 		var c := IsoCoord.cart_to_iso(cell, ts)
 		var tile := Rect2(c - Vector2(64.0, 32.0), Vector2(128.0, 64.0))
-		_check(b.encloses(tile), "bounds enclose diamond bbox of %s got %s vs %s" % [cell, b, tile])
+		_ok(b.encloses(tile), "bounds enclose diamond bbox of %s got %s vs %s" % [cell, b, tile])
 
 	# Single cell, no pad: exactly that one diamond's bounding box.
 	var one := CameraMath.world_bounds_for_cells(Rect2i(3, 3, 1, 1), ts, 0)
 	var ctr := IsoCoord.cart_to_iso(Vector2i(3, 3), ts)
-	_check(one == Rect2(ctr - Vector2(64.0, 32.0), Vector2(128.0, 64.0)), "single-cell AABB got %s" % one)
+	_ok(one == Rect2(ctr - Vector2(64.0, 32.0), Vector2(128.0, 64.0)), "single-cell AABB got %s" % one)
 
 	# Padding grows the box symmetrically and strictly contains the unpadded one.
 	var padded := CameraMath.world_bounds_for_cells(Rect2i(0, 0, 2, 2), ts, 1)
-	_check(padded.encloses(b), "pad grows bounds (padded %s must enclose %s)" % [padded, b])
-	_check(padded.position.x < b.position.x and padded.end.x > b.end.x, "pad expands x got %s" % padded)
-	_check(padded.position.y < b.position.y and padded.end.y > b.end.y, "pad expands y got %s" % padded)
+	_ok(padded.encloses(b), "pad grows bounds (padded %s must enclose %s)" % [padded, b])
+	_ok(padded.position.x < b.position.x and padded.end.x > b.end.x, "pad expands x got %s" % padded)
+	_ok(padded.position.y < b.position.y and padded.end.y > b.end.y, "pad expands y got %s" % padded)
 
 	# Padding is negative-safe (clamped to 0): behaves like no pad.
 	var neg := CameraMath.world_bounds_for_cells(Rect2i(0, 0, 2, 2), ts, -5)
-	_check(neg == b, "negative pad clamps to 0 got %s" % neg)
+	_ok(neg == b, "negative pad clamps to 0 got %s" % neg)

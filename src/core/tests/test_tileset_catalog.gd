@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Runtime tests for TilesetCatalog against REAL in-memory Godot 4.4 TileSets and
 ## live TileMapLayer nodes. Authored + statically checked now, executed once a
 ## binary is available: godot --headless --script <this file>.
@@ -14,10 +14,8 @@ extends SceneTree
 ##   set_cell(coords, source_id := -1, atlas_coords := Vector2i(-1,-1), alternative := 0)
 ##   erase_cell(coords); get_cell_source_id(coords); get_cell_atlas_coords(coords).
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	var a_tileset := _make_tileset(true)   ## has atlas (0,0) AND (1,1)
 	var b_tileset := _make_tileset(false)  ## has only atlas (0,0)
 
@@ -26,22 +24,8 @@ func _initialize() -> void:
 	_test_no_orphan(a_tileset)
 	_test_null_safety(a_tileset, b_tileset)
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
 
 ## Builds a minimal isometric DIAMOND_DOWN TileSet with a single atlas source whose
 ## texture spans 2x2 regions (so atlas (1,1) can be created). Tile (0,0) always

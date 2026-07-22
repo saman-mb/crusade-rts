@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Runtime tests that drive BrushCore against REAL Godot 4.4 TileMapLayer nodes.
 ## Requires a Godot 4.4 runtime; authored + statically checked now, executed once a
 ## binary is available: godot --headless --script <this file>. Each assertion runs a
@@ -9,10 +9,8 @@ extends SceneTree
 ##   set_cell(coords, source_id := -1, atlas_coords := Vector2i(-1,-1), alternative := 0)
 ##   erase_cell(coords); get_cell_source_id(coords); get_cell_atlas_coords(coords).
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	var ts := _build_tileset()
 	var source_id := ts.get_source_id(0)
 	var atlas := Vector2i(0, 0)  ## tile (0,0) is created on the source below, so it is a valid cell.
@@ -35,26 +33,8 @@ func _initialize() -> void:
 	layer_a.queue_free()
 	layer_b.queue_free()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
-## Exact Vector2i equality check with message.
-func _v_eq(a: Vector2i, b: Vector2i, msg: String) -> void:
-	_ok(a == b, "%s: expected %s got %s" % [msg, b, a])
 
 ## Builds a minimal isometric DIAMOND_DOWN TileSet with a single atlas source whose
 ## tile (0,0) exists, so set_cell has a valid source_id + atlas coord. Backed by an

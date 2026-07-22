@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Runtime tests that drive MapSerializer against REAL Godot 4.4 TileMapLayer nodes.
 ## Requires a Godot 4.4 runtime: godot --headless --script <this file>. Proves the
 ## serializer flattens live cells into the MapSchema JSON shape and that the result
@@ -8,10 +8,8 @@ extends SceneTree
 ##   set_cell(coords, source_id := -1, atlas_coords := Vector2i(-1,-1), alternative := 0)
 ##   get_used_cells() -> Array[Vector2i]; get_cell_source_id/atlas_coords/alternative_tile.
 
-var _pass: int = 0
-var _fail: int = 0
 
-func _initialize() -> void:
+func _run() -> void:
 	var ts := _build_tileset()
 	var sid := ts.get_source_id(0)
 
@@ -40,25 +38,11 @@ func _initialize() -> void:
 	layer.queue_free()
 	empty.queue_free()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
 
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
-
 ## Deep element-wise equality for a flattened [x, y]-style Array.
-func _v_eq(a: Array, b: Array, msg: String) -> void:
+func _arr_eq(a: Array, b: Array, msg: String) -> void:
 	if a.size() != b.size():
 		_ok(false, "%s: size expected %d got %d" % [msg, b.size(), a.size()])
 		return
@@ -104,7 +88,7 @@ func _find_cell(cells: Array, pos: Array) -> Dictionary:
 func _test_root(doc: Dictionary) -> void:
 	_i_eq(doc[MapSchema.KEY_SCHEMA_VERSION], MapSchema.CURRENT_SCHEMA, "root schema_version == CURRENT_SCHEMA")
 	_ok(doc[MapSchema.KEY_TILE_SHAPE] == MapSchema.TILE_SHAPE_NAME, "root tile_shape == TILE_SHAPE_NAME")
-	_v_eq(doc[MapSchema.KEY_TILE_SIZE], [128, 64], "root tile_size == [128, 64]")
+	_arr_eq(doc[MapSchema.KEY_TILE_SIZE], [128, 64], "root tile_size == [128, 64]")
 	_ok(doc[MapSchema.KEY_GENERATED_BY] == MapSchema.GENERATED_BY_NAME, "root generated_by == GENERATED_BY_NAME")
 	_i_eq(typeof(doc[MapSchema.KEY_LAYERS]), TYPE_ARRAY, "root layers is TYPE_ARRAY")
 	_i_eq(doc[MapSchema.KEY_LAYERS].size(), 1, "root has 1 layer")
@@ -124,7 +108,7 @@ func _test_cell(doc: Dictionary, sid: int) -> void:
 	if cell.is_empty():
 		return
 	_i_eq(cell[MapSchema.KEY_CELL_SOURCE], sid, "cell [3,5] source == sid")
-	_v_eq(cell[MapSchema.KEY_CELL_ATLAS], [0, 0], "cell [3,5] atlas == [0, 0]")
+	_arr_eq(cell[MapSchema.KEY_CELL_ATLAS], [0, 0], "cell [3,5] atlas == [0, 0]")
 	_i_eq(cell[MapSchema.KEY_CELL_ALT], 0, "cell [3,5] alt == 0")
 
 ## serialize_layers now tags every entry kind=terrain so the loader routes them by
@@ -201,5 +185,5 @@ func _test_round_trip(doc: Dictionary) -> void:
 		return
 	var orig_cell := _find_cell(doc[MapSchema.KEY_LAYERS][0][MapSchema.KEY_CELLS], [3, 5])
 	_i_eq(int(back_cell[MapSchema.KEY_CELL_SOURCE]), int(orig_cell[MapSchema.KEY_CELL_SOURCE]), "round-trip cell source matches")
-	_v_eq(back_cell[MapSchema.KEY_CELL_ATLAS], orig_cell[MapSchema.KEY_CELL_ATLAS], "round-trip cell atlas matches")
+	_arr_eq(back_cell[MapSchema.KEY_CELL_ATLAS], orig_cell[MapSchema.KEY_CELL_ATLAS], "round-trip cell atlas matches")
 	_i_eq(int(back_cell[MapSchema.KEY_CELL_ALT]), int(orig_cell[MapSchema.KEY_CELL_ALT]), "round-trip cell alt matches")

@@ -1,4 +1,4 @@
-extends SceneTree
+extends GdTest
 ## Pure-logic tests for FloodFill (no Node deps; drives only the static iterative compute).
 ## Self-contained SceneTree runner: godot --headless --script <this file>.
 ## Backs compute() with an in-memory grid (Dictionary Vector2i -> {src,atlas}) plus a
@@ -7,8 +7,6 @@ extends SceneTree
 ## diagonal non-connectivity under 4-neighbor topology, bounds + max_cells termination,
 ## empty-space termination (no recursion blowup / hang), and out-of-bounds/single-cell edges.
 
-var _pass: int = 0
-var _fail: int = 0
 
 ## Shared 4-neighbor topology (N/E/S/W). Offsets live ONLY here, never in FloodFill.
 var _neighbors: Callable = func(c: Vector2i) -> Array[Vector2i]:
@@ -19,7 +17,7 @@ var _neighbors: Callable = func(c: Vector2i) -> Array[Vector2i]:
 		c + Vector2i(-1, 0),
 	]
 
-func _initialize() -> void:
+func _run() -> void:
 	_test_contiguous_region()
 	_test_identity_boundary()
 	_test_diagonal_not_connected()
@@ -29,22 +27,8 @@ func _initialize() -> void:
 	_test_out_of_bounds_seed()
 	_test_single_isolated_cell()
 
-	print("PASS %d / FAIL %d" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
 
 # --- helpers ---
-
-## Increments counters; prints only on failure so passing runs stay quiet.
-func _ok(cond: bool, msg: String) -> void:
-	if cond:
-		_pass += 1
-	else:
-		_fail += 1
-		print("FAIL: %s" % msg)
-
-## Exact int equality check with message.
-func _i_eq(a: int, b: int, msg: String) -> void:
-	_ok(a == b, "%s: expected %d got %d" % [msg, b, a])
 
 ## Builds a read Callable over an in-memory grid; absent cells default to the empty sentinel.
 func _make_read(grid: Dictionary) -> Callable:
