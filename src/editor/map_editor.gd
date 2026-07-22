@@ -7,6 +7,13 @@ extends Node2D
 ## static calls and applies the returned action. Left-drag paints, right-drag
 ## erases, `[`/`]` cycle the active elevation, and number keys jump to a tier.
 ##
+## Tool state machine (`ToolState`): B = paint, I = eyedropper (sample tile under
+## cursor into the brush), G = bucket (flood-fill the seed's region). Edits are
+## undoable via an `UndoRedo`: Ctrl+Z undoes, Ctrl+Y / Ctrl+Shift+Z redoes. Each
+## stroke commits ONCE per press->release (paint/erase drags accumulate into one
+## composite action through `StrokeRecorder`); a bucket fill is one one-shot action.
+## Strokes are applied LIVE during the drag, so commits use execute=false.
+##
 ## Screen->cell projection reuses `IsoCoord.pick_cell_global`, which is
 ## camera-safe (works through any Camera2D transform via `to_local`) and
 ## edge-robust: it picks the diamond whose center is nearest rather than relying
@@ -21,6 +28,14 @@ extends Node2D
 ## Optional terrain atlas texture; if null, `_ready` loads the committed default
 ## at res://assets/tilesets/terrain_atlas.png.
 @export var terrain_atlas: Texture2D
+
+## Max undo steps retained; the oldest strokes drop once the cap is exceeded.
+const UNDO_HISTORY := 64
+## Cells the bucket-fill bounds extend beyond the layer's used rect, so a fill can
+## spill into adjacent empty space by a margin rather than clamping to painted tiles.
+const FILL_MARGIN := 4
+## Hard cap on a single bucket-fill region size -- a safety valve against runaway fills.
+const FILL_MAX_CELLS := 4096
 
 ## The resolved MapSystem node. Left UNTYPED on purpose so its
 ## `get_elevation_layer()` / `elevation_layers` API is duck-typed: MapSystem
@@ -46,6 +61,15 @@ var _has_preview: bool = false
 var _painting: bool = false
 ## True while a right-mouse erase drag is active.
 var _erasing: bool = false
+## Undo/redo history. One stroke = one press->release = one composite action, so a
+## single Ctrl+Z reverts a whole paint drag, erase drag, or bucket fill at once.
+var _undo := UndoRedo.new()
+## Active editor tool state machine (B paint / I eyedropper / G bucket).
+var _tool := ToolState.new()
+## Stroke accumulating the current LMB paint / RMB erase drag; null between strokes.
+## Created fresh on press, committed and cleared on release. `_apply_at_mouse`
+## records into it when non-null.
+var _stroke: StrokeRecorder
 ## When false, the brush ignores all input (Play mode / menu open). The DevMenu flips this.
 var editing_enabled: bool = true
 
@@ -60,6 +84,7 @@ func _ready() -> void:
 
 
 func _setup() -> void:
+	_undo.set_max_steps(UNDO_HISTORY)
 	_map_system = get_node_or_null(map_system_path)
 	if _map_system == null:
 		push_warning("map_editor: map_system_path unresolved; editor is inert.")
@@ -131,13 +156,38 @@ func _unhandled_input(event: InputEvent) -> void:
 		var button := event as InputEventMouseButton
 		match button.button_index:
 			MOUSE_BUTTON_LEFT:
-				_painting = button.pressed
 				if button.pressed:
-					_apply_at_mouse(BrushCore.Mode.PAINT)
+					# Ignore a chorded LMB press while an RMB erase drag is live: a
+					# fresh stroke would orphan the erase's cells (no undo entry).
+					if _erasing:
+						return
+					# Dispatch on the active tool. Only PAINT starts a drag stroke;
+					# eyedropper reads, bucket is a one-shot fill (both are self-contained).
+					match _tool.tool:
+						ToolState.Tool.PAINT:
+							_stroke = StrokeRecorder.new()
+							_painting = true
+							_apply_at_mouse(BrushCore.Mode.PAINT)  # records the first cell
+						ToolState.Tool.EYEDROPPER:
+							_eyedrop_at_mouse()
+						ToolState.Tool.BUCKET:
+							_bucket_fill_at_mouse()
+				else:
+					_end_stroke("Paint", _painting)
+					_painting = false
 			MOUSE_BUTTON_RIGHT:
-				_erasing = button.pressed
 				if button.pressed:
+					# Symmetric guard: don't start an erase mid paint-drag (would
+					# discard the live paint stroke, leaving un-undoable tiles).
+					if _painting:
+						return
+					# Erase mirrors paint: record the live drag, commit as one action.
+					_stroke = StrokeRecorder.new()
+					_erasing = true
 					_apply_at_mouse(BrushCore.Mode.ERASE)
+				else:
+					_end_stroke("Erase", _erasing)
+					_erasing = false
 	elif event is InputEventMouseMotion:
 		_update_preview()
 		if _painting:
@@ -147,6 +197,30 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey:
 		var key := event as InputEventKey
 		if key.pressed and not key.echo:
+			# Undo / redo -- raw keycode combos, matching the [/] house style (not
+			# project.godot actions). Refresh the ghost after history moves the map.
+			if key.ctrl_pressed and key.keycode == KEY_Z and not key.shift_pressed:
+				if _undo.has_undo():
+					_undo.undo()
+				_update_preview()
+				return
+			if (key.ctrl_pressed and key.keycode == KEY_Y) or (key.ctrl_pressed and key.shift_pressed and key.keycode == KEY_Z):
+				if _undo.has_redo():
+					_undo.redo()
+				_update_preview()
+				return
+			# Tool select (B/I/G). from_keycode returns -1 for [/]/1-3, so those fall
+			# through to the layer handling below untouched.
+			var t := ToolState.from_keycode(key.keycode)
+			if t != -1:
+				_tool.select(t)
+				_update_preview()
+				return
+			# A stroke records no per-cell layer, so switching elevation mid-drag would
+			# split one undo action across layers (old-layer cells never revert). Lock
+			# the layer while a paint/erase drag is live; the keys resume on release.
+			if _painting or _erasing:
+				return
 			match key.keycode:
 				KEY_BRACKETLEFT:
 					_set_active_level(BrushCore.cycle_level(_active_level, -1, _layer_count()))
@@ -167,15 +241,75 @@ func _apply_at_mouse(mode: BrushCore.Mode) -> void:
 	var cur_src := _active_layer.get_cell_source_id(cell)
 	var cur_atlas := _active_layer.get_cell_atlas_coords(cell)
 	var r := BrushCore.resolve(mode, cur_src, cur_atlas, _source_id, _atlas_coords)
+	# When a stroke is active, record before/after per changed cell so the whole drag
+	# commits as ONE undo action. StrokeRecorder drops net no-ops, so NONE is skipped.
 	match r["action"]:
 		BrushCore.Action.WRITE:
+			if _stroke != null:
+				_stroke.record(cell, cur_src, cur_atlas, r["source_id"], r["atlas_coords"])
 			_active_layer.set_cell(cell, r["source_id"], r["atlas_coords"])
 		BrushCore.Action.CLEAR:
+			if _stroke != null:
+				_stroke.record(cell, cur_src, cur_atlas, -1, Vector2i(-1, -1))
 			_active_layer.erase_cell(cell)
 		BrushCore.Action.NONE:
 			pass
 	# NOTE: nav/physics consumers would want a single batched `update_internals()`
 	# after a paint stroke ends; per-cell drag painting does not need it here.
+
+
+## Commits the just-finished drag stroke (paint or erase) as ONE undo action and clears
+## it. `active` is the drag flag captured before it is reset; a null/empty stroke commits
+## nothing (StrokeRecorder makes no action for a net-zero stroke).
+## ASSUMED PEER API: StrokeRecorder.commit(ur, action_name, sink) commits with
+## execute=false (stroke already applied live during the drag). SDET: verify signature.
+func _end_stroke(action_name: String, active: bool) -> void:
+	if active and _stroke != null and not _stroke.is_empty():
+		_stroke.commit(_undo, action_name, Callable(_active_layer, "set_cell"))
+	_stroke = null
+
+
+## EYEDROPPER: samples the tile under the cursor from the ACTIVE elevation layer into the
+## brush (source id + atlas coords) and refreshes the ghost. Reads only; no stroke, no undo
+## entry, no drag. Empty cells (source -1) are ignored so the brush keeps a paintable tile.
+func _eyedrop_at_mouse() -> void:
+	if _active_layer == null or get_viewport().gui_get_hovered_control() != null:
+		return
+	var cell := IsoCoord.pick_cell_global(_active_layer, get_global_mouse_position())
+	var s := _active_layer.get_cell_source_id(cell)
+	var a := _active_layer.get_cell_atlas_coords(cell)
+	if s != -1:
+		_source_id = s
+		_atlas_coords = a
+		_update_preview()
+
+
+## BUCKET: flood-fills the seed cell's contiguous same-identity region on the active layer
+## with the brush tile, applied live and committed as ONE "Bucket Fill" undo action. One-shot
+## (no drag flag). FloodFill is pure -- the injected read/neighbors lambdas wrap the live layer.
+func _bucket_fill_at_mouse() -> void:
+	if _active_layer == null or get_viewport().gui_get_hovered_control() != null:
+		return
+	var seed := IsoCoord.pick_cell_global(_active_layer, get_global_mouse_position())
+	var match_src := _active_layer.get_cell_source_id(seed)
+	var match_atlas := _active_layer.get_cell_atlas_coords(seed)
+	# Bound the otherwise-infinite layer: the used rect grown by a margin so a fill can
+	# spill a little into surrounding empty space without running forever.
+	var bounds := _active_layer.get_used_rect().grow(FILL_MARGIN)
+	var read := func(c: Vector2i) -> Dictionary:
+		return { "src": _active_layer.get_cell_source_id(c), "atlas": _active_layer.get_cell_atlas_coords(c) }
+	var neighbors := func(c: Vector2i) -> Array[Vector2i]:
+		return _active_layer.get_surrounding_cells(c)
+	var cells := FloodFill.compute(seed, match_src, match_atlas, bounds, read, neighbors, FILL_MAX_CELLS)
+	# All fill cells share the seed identity; StrokeRecorder drops cells that don't net-change
+	# (e.g. filling onto the identical brush tile), so this commits nothing when it's a no-op.
+	var stroke := StrokeRecorder.new()
+	for cell in cells:
+		stroke.record(cell, match_src, match_atlas, _source_id, _atlas_coords)
+		_active_layer.set_cell(cell, _source_id, _atlas_coords)
+	if not stroke.is_empty():
+		stroke.commit(_undo, "Bucket Fill", Callable(_active_layer, "set_cell"))
+	_update_preview()
 
 
 ## Moves the translucent ghost to the cell under the cursor, clearing it when the
