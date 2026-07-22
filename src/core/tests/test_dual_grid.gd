@@ -9,6 +9,8 @@ func _run() -> void:
 	_test_mask_bijection()
 	_test_logical_corners_of_display()
 	_test_inverse_property()
+	_test_changed_display_cells_negative()
+	_test_atlas_coord_out_of_range()
 	_test_tile_for_display_pond()
 
 
@@ -56,6 +58,28 @@ func _test_inverse_property() -> void:
 	for d in changed:
 		var corners := DualGrid.logical_corners_of_display(d)
 		_ok(corners.has(l), "L %s in corners of display %s (got %s)" % [l, d, corners])
+
+## The inverse property must also hold at NEGATIVE logical coordinates -- the
+## previous case only exercised (2,2), so a signed/unsigned or positive-only
+## assumption in the +1 quad would slip through. (#31)
+func _test_changed_display_cells_negative() -> void:
+	var l := Vector2i(-3, -2)
+	var changed := DualGrid.changed_display_cells(l)
+	var want: Array[Vector2i] = [Vector2i(-3, -2), Vector2i(-2, -2), Vector2i(-3, -1), Vector2i(-2, -1)]
+	_ok(changed == want, "changed_display_cells(-3,-2): expected %s got %s" % [want, changed])
+	for d in changed:
+		_ok(DualGrid.logical_corners_of_display(d).has(l), "L %s in corners of display %s" % [l, d])
+
+## atlas_coord_for_mask guards its LOOKUP index: masks outside 0..15 are
+## unreachable via corner_mask (a 4-bit build) so the guard is otherwise never
+## exercised -- assert it returns SENTINEL rather than indexing out of bounds. (#31)
+func _test_atlas_coord_out_of_range() -> void:
+	for bad in [-1, -8, 16, 17, 100, -100]:
+		_v_eq(DualGrid.atlas_coord_for_mask(bad), DualGrid.SENTINEL,
+			"atlas_coord_for_mask(%d) out-of-range -> SENTINEL" % bad)
+	# In-range boundaries stay meaningful: 0 is the empty sentinel, 15 is real art.
+	_v_eq(DualGrid.atlas_coord_for_mask(0), DualGrid.SENTINEL, "mask 0 -> SENTINEL (empty)")
+	_ok(DualGrid.atlas_coord_for_mask(15) != DualGrid.SENTINEL, "mask 15 -> real coord")
 
 ## Round-trip against a "pond" predicate (filled for cells in 0..2 on both axes).
 func _test_tile_for_display_pond() -> void:

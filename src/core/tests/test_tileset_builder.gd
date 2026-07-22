@@ -19,6 +19,7 @@ func _run() -> void:
 	if src != null:
 		_test_tiles(src)
 		_test_water_animation(src)
+	_test_animation_bounds_independent()
 	_test_committed_asset()
 
 
@@ -88,6 +89,34 @@ func _test_water_animation(src: TileSetAtlasSource) -> void:
 			"water frame %d duration %f != %f" % [i, dur, TileSetConstants.WATER_FRAME_DURATION])
 	_ok(src.get_tile_animation_mode(water) == TileSetAtlasSource.TILE_ANIMATION_MODE_RANDOM_START_TIMES,
 		"water animation mode is not RANDOM_START_TIMES")
+
+## INDEPENDENT atlas-bounds guard for the water animation strip (#31). Derived
+## purely from the geometry constants + arithmetic, NOT from the builder's
+## output: _test_water_animation asserts frames_count/columns against the same
+## TileSetConstants the builder reads, so bumping WATER_FRAMES/WATER_COLUMNS/
+## WATER_ANIM_COORDS past the atlas edge moves both sides together and stays
+## green while real art would overflow ATLAS_PX. This check fails in that case.
+func _test_animation_bounds_independent() -> void:
+	var region := TileSetConstants.REGION_SIZE
+	var atlas := TileSetConstants.ATLAS_PX
+	_ok(region.x > 0 and region.y > 0, "region size positive")
+	# The atlas must carve into whole regions on both axes (no partial row/col).
+	_i_eq(atlas.x % region.x, 0, "atlas width is a whole number of regions")
+	_i_eq(atlas.y % region.y, 0, "atlas height is a whole number of regions")
+	var cols := atlas.x / region.x
+	var rows := atlas.y / region.y
+
+	var start := TileSetConstants.WATER_ANIM_COORDS
+	var frames := TileSetConstants.WATER_FRAMES
+	var acols := TileSetConstants.WATER_COLUMNS
+	_ok(frames > 0 and acols > 0, "water frame/column counts positive")
+	_ok(start.x >= 0 and start.y >= 0, "water anim origin non-negative")
+	# The strip lays `frames` cells across `acols` columns, wrapping downward:
+	# first row spans min(frames, acols) columns; total height is ceil(frames/acols).
+	var strip_cols := mini(frames, acols)
+	var strip_rows := (frames + acols - 1) / acols
+	_ok(start.x + strip_cols <= cols, "water strip exceeds atlas columns: %d+%d > %d" % [start.x, strip_cols, cols])
+	_ok(start.y + strip_rows <= rows, "water strip exceeds atlas rows: %d+%d > %d" % [start.y, strip_rows, rows])
 
 ## Committed-asset check (runs after CI's import step): the atlas PNG exists on
 ## disk and matches the contracted pixel dimensions. A null load is a FAIL, not

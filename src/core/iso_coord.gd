@@ -45,6 +45,12 @@ static func cell_to_local(layer: TileMapLayer, cell: Vector2i) -> Vector2:
 	return layer.map_to_local(cell)
 
 ## Layer-local pixel -> cell via the layer's own tile geometry.
+## WARNING: delegates to TileMapLayer.local_to_map, which has documented edge
+## inaccuracy on isometric shapes (godotengine/godot#89423) -- the exact "wrong
+## tile at the diamond edge" artifact Story #8 set out to avoid. For mouse / hover
+## / hit-testing use `pick_cell_global` (or `pick_cell` in local space) instead:
+## they round the exact continuous inverse and are edge-robust. This wrapper is
+## kept only for parity/where Godot's own mapping is explicitly wanted. (#13)
 static func local_to_cell(layer: TileMapLayer, local_pos: Vector2) -> Vector2i:
 	return layer.local_to_map(local_pos)
 
@@ -53,6 +59,12 @@ static func neighbor(layer: TileMapLayer, cell: Vector2i, dir: TileSet.CellNeigh
 	return layer.get_neighbor_cell(cell, dir)
 
 ## Global pixel position of a cell at an elevation level (offset from MapConstants).
+## ASSUMES UNSCALED LAYERS: the base position goes through `to_global` (which
+## respects the layer's transform, incl. scale) but the elevation lift is added
+## as RAW, unscaled pixels. Correct for the current 1:1-scale layer stack; if a
+## layer is ever zoomed/scaled the base and the lift would desync. Revisit then
+## by scaling the offset (or applying it pre-`to_global`). Camera zoom is fine --
+## it scales the whole canvas uniformly, not individual layers. (#15)
 static func tile_world_pos(layer: TileMapLayer, cell: Vector2i, level: int) -> Vector2:
 	return layer.to_global(layer.map_to_local(cell)) + MapConstants.elevation_offset(level)
 
