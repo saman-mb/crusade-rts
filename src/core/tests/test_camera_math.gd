@@ -14,7 +14,7 @@ func _initialize() -> void:
 	_test_zoom_step_and_clamp()
 	_test_clamp_target_position()
 	_test_edge_pan_ramp()
-	_test_zoom_anchor_correction()
+	_test_world_bounds_for_cells()
 
 	print("PASS %d / FAIL %d" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -192,23 +192,40 @@ func _test_edge_pan_ramp() -> void:
 	_check(abs(br.x - edge_speed) < tol, "corner vx ~ +edge_speed got %s" % br.x)
 	_check(abs(br.y - edge_speed) < tol, "corner vy ~ +edge_speed got %s" % br.y)
 
-## Zoom anchoring keeps the point under the cursor fixed. The correction equals
-## the closed form offset*(1/z0 - 1/z1), is zero for no zoom change, and a
-## round-trip (in then out) drifts nowhere.
-func _test_zoom_anchor_correction() -> void:
-	var offset := Vector2(200.0, -120.0)
-	var z0 := 1.0
-	var z1 := 1.1
+## world_bounds_for_cells projects a block of painted cells to the world-space
+## AABB that RtsCamera clamps against (#17). It must match the diamond extents of
+## cart_to_iso, pad symmetrically in cell space, and return the empty (unbounded)
+## sentinel when nothing is painted.
+func _test_world_bounds_for_cells() -> void:
+	var ts := Vector2i(128, 64)   # w=64, h=32
 
-	# Matches the closed-form world-space shift.
-	var closed := offset * (1.0 / z0 - 1.0 / z1)
-	var corr := CameraMath.zoom_anchor_correction(offset, z0, z1)
-	_check(_v_eq(corr, closed), "correction matches closed form got %s want %s" % [corr, closed])
+	# Empty region => empty Rect2 (RtsCamera treats zero area as unbounded).
+	var empty := CameraMath.world_bounds_for_cells(Rect2i(0, 0, 0, 0), ts, 3)
+	_check(empty.size == Vector2.ZERO, "blank map -> unbounded sentinel got %s" % empty)
 
-	# In-then-out round trip cancels: no cumulative drift.
-	var back := CameraMath.zoom_anchor_correction(offset, z1, z0)
-	_check(_v_eq(corr + back, Vector2.ZERO), "round-trip correction ~ ZERO got %s" % (corr + back))
+	# 2x2 block at origin, no pad. Hand-derived from the four corner diamonds:
+	# left vertex of (0,1) at x=-64, right vertex of (1,0) at x=192, top of (0,0)
+	# at y=0, bottom of (1,1) at y=128.
+	var b := CameraMath.world_bounds_for_cells(Rect2i(0, 0, 2, 2), ts, 0)
+	_check(b == Rect2(-64.0, 0.0, 256.0, 128.0), "2x2 origin block AABB got %s" % b)
 
-	# No zoom change => no correction.
-	var none := CameraMath.zoom_anchor_correction(offset, z0, z0)
-	_check(_v_eq(none, Vector2.ZERO), "no-op zoom correction = ZERO got %s" % none)
+	# Every painted diamond's bounding box must sit inside the reported bounds.
+	for cell in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		var c := IsoCoord.cart_to_iso(cell, ts)
+		var tile := Rect2(c - Vector2(64.0, 32.0), Vector2(128.0, 64.0))
+		_check(b.encloses(tile), "bounds enclose diamond bbox of %s got %s vs %s" % [cell, b, tile])
+
+	# Single cell, no pad: exactly that one diamond's bounding box.
+	var one := CameraMath.world_bounds_for_cells(Rect2i(3, 3, 1, 1), ts, 0)
+	var ctr := IsoCoord.cart_to_iso(Vector2i(3, 3), ts)
+	_check(one == Rect2(ctr - Vector2(64.0, 32.0), Vector2(128.0, 64.0)), "single-cell AABB got %s" % one)
+
+	# Padding grows the box symmetrically and strictly contains the unpadded one.
+	var padded := CameraMath.world_bounds_for_cells(Rect2i(0, 0, 2, 2), ts, 1)
+	_check(padded.encloses(b), "pad grows bounds (padded %s must enclose %s)" % [padded, b])
+	_check(padded.position.x < b.position.x and padded.end.x > b.end.x, "pad expands x got %s" % padded)
+	_check(padded.position.y < b.position.y and padded.end.y > b.end.y, "pad expands y got %s" % padded)
+
+	# Padding is negative-safe (clamped to 0): behaves like no pad.
+	var neg := CameraMath.world_bounds_for_cells(Rect2i(0, 0, 2, 2), ts, -5)
+	_check(neg == b, "negative pad clamps to 0 got %s" % neg)

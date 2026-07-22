@@ -98,6 +98,9 @@ func _reload() -> void:
 		return
 	var res := MapLoader.load_map(r["text"], _layers(), _objects(), _tile_set)
 	print("[MapPersistence] reloaded %s (ok=%s, %d diagnostics)" % [current_map_path, res["ok"], (res["diagnostics"] as Array).size()])
+	# The freshly-loaded extent replaces whatever was painted, so re-derive the
+	# camera clamp bounds from it (#17). Duck-typed; MapSystem carries no class_name.
+	_map_system.refresh_camera_bounds()
 	_last_mtime = MapFileIO.modified_time(current_map_path)
 
 

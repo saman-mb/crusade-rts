@@ -65,19 +65,17 @@ func _process(delta: float) -> void:
 		Input.get_vector("cam_left", "cam_right", "cam_up", "cam_down"),
 		pan_speed, zoom.x, delta)
 
-	# 2. Edge pan, only when the window is focused, the cursor is inside it, and
-	#    no GUI control is hovered (so panning does not fight UI interaction).
-	if edge_pan_enabled and _mouse_in_window and get_window().has_focus() \
+	# 2. Edge pan, only when the window is focused, the cursor is inside it, no
+	#    GUI control is hovered (so panning does not fight UI interaction), and no
+	#    middle-drag is active (#20: edge velocity must not fight a 1:1 grab).
+	if edge_pan_enabled and _mouse_in_window and not _dragging and get_window().has_focus() \
 			and get_viewport().gui_get_hovered_control() == null:
 		target_position += CameraMath.edge_pan_velocity(
 			get_viewport().get_mouse_position(), get_viewport_rect().size,
 			edge_fraction, edge_speed) * delta / zoom.x
 
-	# 3. Clamp targets: zoom always, position only when bounds have real area.
+	# 3. Clamp the zoom target (the anchor step below consumes it).
 	target_zoom = CameraMath.clamp_zoom(target_zoom, zoom_min, zoom_max)
-	if world_bounds.size.x > 0.0 and world_bounds.size.y > 0.0:
-		target_position = CameraMath.clamp_target_position(
-			target_position, world_bounds, get_viewport_rect().size, zoom.x)
 
 	# 4. Cursor-anchored zoom, corrected against the mid-transition zoom every
 	#    frame so the world point under the cursor stays fixed (drift-free).
@@ -87,7 +85,14 @@ func _process(delta: float) -> void:
 	target_position += before - after
 	position += before - after
 
-	# 5. Position smoothing: snap 1:1 while dragging, otherwise ease.
+	# 5. Clamp the position target AFTER the anchor step so it is strictly
+	#    contained every frame (#19: the anchor can nudge it past an edge); uses
+	#    the post-decay zoom for the correct view inset. Only when bounds have area.
+	if world_bounds.size.x > 0.0 and world_bounds.size.y > 0.0:
+		target_position = CameraMath.clamp_target_position(
+			target_position, world_bounds, get_viewport_rect().size, zoom.x)
+
+	# 6. Position smoothing: snap 1:1 while dragging, otherwise ease.
 	if _dragging:
 		position = target_position
 	else:
