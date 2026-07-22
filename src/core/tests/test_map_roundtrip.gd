@@ -16,9 +16,46 @@ var _fail: int = 0
 func _initialize() -> void:
 	_test_layers_roundtrip()
 	_test_objects_roundtrip()
+	_test_alt_roundtrip()
 
 	print("PASS %d / FAIL %d" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+## Nonzero alternative_tile survives the full save/load round-trip (#44). Every
+## other case here paints alt 0; this proves a real alt is serialized and repainted
+## rather than silently dropped or clamped to the base tile. Builds a TileSet that
+## actually owns an alternative on (0,0) so the cell passes validation on load.
+func _test_alt_roundtrip() -> void:
+	var ts := _build_tileset()
+	var sid := ts.get_source_id(0)
+	var src := ts.get_source(sid) as TileSetAtlasSource
+	var alt_id := src.create_alternative_tile(Vector2i(0, 0))
+	_ok(alt_id > 0, "created a real alternative tile id (%d)" % alt_id)
+
+	var s := TileMapLayer.new()
+	s.tile_set = ts
+	root.add_child(s)
+	s.set_cell(Vector2i(2, 2), sid, Vector2i(0, 0), alt_id)  # nonzero alt
+
+	var doc := MapSerializer.serialize_layers([s], ["ground"], [0])
+	var path := "user://test_map_alt_roundtrip.json"
+	_cleanup_files(path)
+	_ok(MapFileIO.save_text(path, MapSerializer.to_json(doc)), "alt atomic save ok")
+	var r := MapFileIO.load_text(path)
+	_ok(r["ok"], "alt read back ok")
+
+	var d := TileMapLayer.new()
+	d.tile_set = ts
+	root.add_child(d)
+	var dst: Array[TileMapLayer] = [d]
+	var res := MapLoader.load_into_layers(r["text"], dst, ts)
+	_ok(res["ok"], "alt load ok")
+	_i_eq(d.get_cell_source_id(Vector2i(2, 2)), sid, "alt cell source survived")
+	_i_eq(d.get_cell_alternative_tile(Vector2i(2, 2)), alt_id, "nonzero alt survived round-trip")
+
+	s.queue_free()
+	d.queue_free()
+	_cleanup_files(path)
 
 ## The classic terrain-only round-trip: serialize_layers -> save -> load_into_layers.
 func _test_layers_roundtrip() -> void:
@@ -200,6 +237,9 @@ func _test_objects_roundtrip() -> void:
 	_ok(res2["ok"], "load_map ok with null objects target")
 	_i_eq(d2_elev0.get_cell_source_id(Vector2i(1, 1)), sid, "terrain still loads with null objects")
 	_ok((res2["diagnostics"] as Array).size() >= 1, "null objects target yields a diagnostic")
+	# Anti-misroute: a dropped object cell must NOT land on any terrain layer.
+	_i_eq(d2_elev0.get_cell_source_id(Vector2i(7, 7)), -1, "null-objects: obj cell not misrouted to elev0")
+	_i_eq(d2_elev1.get_cell_source_id(Vector2i(7, 7)), -1, "null-objects: obj cell not misrouted to elev1")
 
 	# --- Cleanup. ---
 	elev0.queue_free()
