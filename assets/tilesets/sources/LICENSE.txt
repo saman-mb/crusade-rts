@@ -1,0 +1,13 @@
+These source tiles are licensed under CC0 1.0 Universal (Public Domain
+Dedication). You may copy, modify, distribute, and use them, even for
+commercial purposes, all without asking permission.
+
+Full text: https://creativecommons.org/publicdomain/zero/1.0/
+
+Work:    "1000+ Isometric Floor Tiles" (Autotiles + Water update packs)
+Author:  Screaming Brain Studios (https://opengameart.org/users/screaming-brain-studios)
+Source:  https://opengameart.org/content/1000-isometric-floor-tiles
+License: CC0 1.0 (Public Domain)
+
+CC0 imposes no attribution requirement. The CREDITS.md entry at the repo root
+is a courtesy acknowledgement of provenance, not an obligation.
