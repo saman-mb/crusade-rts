@@ -1,0 +1,106 @@
+[gd_scene load_steps=2 format=3 uid="uid://crusadedevmenu01"]
+
+[ext_resource type="Script" path="res://src/ui/dev_menu.gd" id="1_devmenu"]
+
+[node name="DevMenu" type="CanvasLayer"]
+layer = 100
+script = ExtResource("1_devmenu")
+
+[node name="Root" type="Control" parent="."]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="Scrim" type="ColorRect" parent="Root"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.02, 0.027, 0.043, 0.8)
+
+[node name="CenterContainer" type="CenterContainer" parent="Root"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CenterPanel" type="PanelContainer" parent="Root/CenterContainer"]
+
+[node name="PanelMargin" type="MarginContainer" parent="Root/CenterContainer/CenterPanel"]
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="MenuVBox" type="VBoxContainer" parent="Root/CenterContainer/CenterPanel/PanelMargin"]
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox"]
+text = "CRUSADE — DEV MENU"
+horizontal_alignment = 1
+
+[node name="TitleRule" type="HSeparator" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox"]
+
+[node name="ModeRow" type="HBoxContainer" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox"]
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="ModeLabel" type="Label" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox/ModeRow"]
+text = "MODE"
+
+[node name="ModeEditorBtn" type="Button" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox/ModeRow"]
+toggle_mode = true
+button_pressed = true
+text = "EDITOR"
+
+[node name="ModePlayBtn" type="Button" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox/ModeRow"]
+toggle_mode = true
+text = "PLAY"
+
+[node name="ActionRule" type="HSeparator" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox"]
+
+[node name="ActionCol" type="VBoxContainer" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox"]
+theme_override_constants/separation = 8
+
+[node name="ResumeBtn" type="Button" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox/ActionCol"]
+text = "RESUME (Esc)"
+
+[node name="QuitBtn" type="Button" parent="Root/CenterContainer/CenterPanel/PanelMargin/MenuVBox/ActionCol"]
+text = "QUIT TO DESKTOP"
+
+[node name="Sidebar" type="PanelContainer" parent="Root"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -320.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = 560.0
+grow_horizontal = 0
+
+[node name="SidebarMargin" type="MarginContainer" parent="Root/Sidebar"]
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="SidebarVBox" type="VBoxContainer" parent="Root/Sidebar/SidebarMargin"]
+theme_override_constants/separation = 8
+
+[node name="SidebarTitle" type="Label" parent="Root/Sidebar/SidebarMargin/SidebarVBox"]
+text = "TILESETS"
+
+[node name="SidebarRule" type="HSeparator" parent="Root/Sidebar/SidebarMargin/SidebarVBox"]
+
+[node name="TilesetList" type="ItemList" parent="Root/Sidebar/SidebarMargin/SidebarVBox"]
+size_flags_vertical = 3
+select_mode = 0
+
+[node name="ListRule" type="HSeparator" parent="Root/Sidebar/SidebarMargin/SidebarVBox"]
+
+[node name="OrphanReadout" type="Label" parent="Root/Sidebar/SidebarMargin/SidebarVBox"]
+text = ""
+autowrap_mode = 2
