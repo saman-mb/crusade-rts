@@ -78,9 +78,30 @@ static func clamp_target_position(target: Vector2, bounds: Rect2, viewport_size:
 		out_y = clampf(target.y, min_c.y, max_c.y)
 	return Vector2(out_x, out_y)
 
-## Position correction that keeps the world point under the cursor fixed across
-## a zoom change (zoom-to-cursor anchoring).
-static func zoom_anchor_correction(mouse_screen_offset: Vector2, zoom_before: float, zoom_after: float) -> Vector2:
-	var zb := zoom_before if zoom_before > 0.0 else 1.0
-	var za := zoom_after if zoom_after > 0.0 else 1.0
-	return mouse_screen_offset * (1.0 / zb - 1.0 / za)
+## World-space AABB enclosing a rectangular block of painted isometric cells,
+## grown by `pad_cells` on every side so panning keeps editing headroom. This is
+## what feeds RtsCamera.world_bounds (#17): the map has no fixed extent, so bounds
+## are derived from the actual used cells.
+##
+## The diamond CENTER of a cell is `cart_to_iso` (which faithfully mirrors
+## TileMapLayer.map_to_local); each tile's diamond spans +/- half a tile from its
+## center, so the enclosing box is found from the four extreme corner cells.
+## Returns an empty Rect2 (the "unbounded" sentinel RtsCamera checks) when the
+## cell region has no area, e.g. a blank map.
+static func world_bounds_for_cells(used_cells: Rect2i, tile_size: Vector2i, pad_cells: int) -> Rect2:
+	if used_cells.size.x <= 0 or used_cells.size.y <= 0:
+		return Rect2()
+	var pad := maxi(pad_cells, 0)
+	var min_cx := used_cells.position.x - pad
+	var min_cy := used_cells.position.y - pad
+	var max_cx := used_cells.position.x + used_cells.size.x - 1 + pad
+	var max_cy := used_cells.position.y + used_cells.size.y - 1 + pad
+	var w := tile_size.x / 2.0
+	var h := tile_size.y / 2.0
+	# Extremes: min-x at (min_cx,max_cy) left vertex, max-x at (max_cx,min_cy) right
+	# vertex, min-y at (min_cx,min_cy) top vertex, max-y at (max_cx,max_cy) bottom.
+	var x_min := (min_cx - max_cy) * w
+	var x_max := (max_cx - min_cy) * w + 2.0 * w
+	var y_min := (min_cx + min_cy) * h
+	var y_max := (max_cx + max_cy) * h + 2.0 * h
+	return Rect2(x_min, y_min, x_max - x_min, y_max - y_min)

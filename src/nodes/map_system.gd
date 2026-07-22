@@ -9,6 +9,10 @@ extends Node2D
 ## are just cached defaults; this script re-derives and auto-corrects them,
 ## in the editor too via @tool, if the constant ever changes).
 
+## Cells of pan headroom left around the painted map so the camera can frame the
+## edge tiles and the editor has room to paint outward before the bounds catch up.
+const CAMERA_BOUNDS_PAD_CELLS := 3
+
 @onready var elevation_layers: Array[TileMapLayer] = [
 	$Elevation0,
 	$Elevation1,
@@ -18,6 +22,10 @@ extends Node2D
 
 func _ready() -> void:
 	_apply_elevation_offsets()
+	# Feed the camera its clamp bounds from the initial content, but only at
+	# runtime: the @tool pass must not mutate the instanced camera in the editor.
+	if not Engine.is_editor_hint():
+		refresh_camera_bounds()
 
 ## Positions each elevation layer from MapConstants and sets a matching
 ## y_sort_origin so the layer sorts at its true (unlifted) world depth.
@@ -36,3 +44,34 @@ func get_elevation_layer(level: int) -> TileMapLayer:
 	if level < 0 or level >= elevation_layers.size():
 		return null
 	return elevation_layers[level]
+
+## Cell-space union of every layer's used region (elevation stack + objects).
+## All layers share one cell grid, so their rects merge directly. Empty layers
+## are skipped so a blank layer does not drag the union to include cell (0,0);
+## returns a zero-size rect when nothing is painted anywhere.
+func used_cell_rect() -> Rect2i:
+	var rect := Rect2i()
+	var seeded := false
+	for layer in elevation_layers:
+		if layer == null:
+			continue
+		var r := layer.get_used_rect()
+		if r.size.x <= 0 or r.size.y <= 0:
+			continue
+		rect = r if not seeded else rect.merge(r)
+		seeded = true
+	if objects_layer != null:
+		var ro := objects_layer.get_used_rect()
+		if ro.size.x > 0 and ro.size.y > 0:
+			rect = ro if not seeded else rect.merge(ro)
+	return rect
+
+## Recomputes the sibling RtsCamera's clamp bounds from the current painted
+## extent (#17). Call after loading/painting changes the map. Safe no-op if the
+## camera is absent; a blank map yields empty bounds => the camera stays unbounded.
+func refresh_camera_bounds() -> void:
+	var camera := get_node_or_null(^"Camera") as RtsCamera
+	if camera == null:
+		return
+	camera.world_bounds = CameraMath.world_bounds_for_cells(
+		used_cell_rect(), MapConstants.TILE_SIZE, CAMERA_BOUNDS_PAD_CELLS)
