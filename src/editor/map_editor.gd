@@ -157,6 +157,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		match button.button_index:
 			MOUSE_BUTTON_LEFT:
 				if button.pressed:
+					# Ignore a chorded LMB press while an RMB erase drag is live: a
+					# fresh stroke would orphan the erase's cells (no undo entry).
+					if _erasing:
+						return
 					# Dispatch on the active tool. Only PAINT starts a drag stroke;
 					# eyedropper reads, bucket is a one-shot fill (both are self-contained).
 					match _tool.tool:
@@ -173,6 +177,10 @@ func _unhandled_input(event: InputEvent) -> void:
 					_painting = false
 			MOUSE_BUTTON_RIGHT:
 				if button.pressed:
+					# Symmetric guard: don't start an erase mid paint-drag (would
+					# discard the live paint stroke, leaving un-undoable tiles).
+					if _painting:
+						return
 					# Erase mirrors paint: record the live drag, commit as one action.
 					_stroke = StrokeRecorder.new()
 					_erasing = true
@@ -207,6 +215,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			if t != -1:
 				_tool.select(t)
 				_update_preview()
+				return
+			# A stroke records no per-cell layer, so switching elevation mid-drag would
+			# split one undo action across layers (old-layer cells never revert). Lock
+			# the layer while a paint/erase drag is live; the keys resume on release.
+			if _painting or _erasing:
 				return
 			match key.keycode:
 				KEY_BRACKETLEFT:
