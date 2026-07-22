@@ -1,0 +1,21 @@
+Provenance of the raw source art in this directory.
+
+grass_dirt.png
+  Original: "128x64 Grass A to Dirt A.png" from the "Autotiles" update pack
+            of "1000+ Isometric Floor Tiles" (Screaming Brain Studios, CC0).
+  Format:   512x448 RGB, a 4x7 grid of 128x64 isometric cells.
+  Used by:  tools/pack_terrain_atlas.py -- grass = cell (col 1, row 3),
+            dirt = cell (col 1, row 4).
+
+water.png
+  Original: "Grass A - Water Flat 128x64.png" from the "Water" update pack
+            of the same CC0 set.
+  Format:   1024x384 RGB, an 8x6 grid of 128x64 isometric cells.
+  Used by:  tools/pack_terrain_atlas.py -- the most water-dominant cell is
+            selected deterministically and brightness-ramped into 4 anim frames.
+
+Only the specific sheets consumed by the packer are vendored here (not the full
+multi-megabyte pack). To regenerate assets/tilesets/terrain_atlas.png from these
+sources:  python3 tools/pack_terrain_atlas.py
+
+See LICENSE.txt (CC0) and /CREDITS.md.
