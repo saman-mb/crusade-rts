@@ -95,8 +95,21 @@ region's 1px border is neutralised. A flat region therefore encodes uniform
 `(128,128,255)`. The output (`terrain_atlas_n.png`, `512×320` RGB) is a **CC0
 derivative** of the CC0 diffuse atlas. Invariants are covered by
 `tools/test_gen_normal_atlas.py` (run manually — Python tools are outside the
-Godot CI test glob). Wiring the normal map into the TileSet + the sun is L3
-(#84); `--invert-y` is available if Godot wants the green channel flipped.
+Godot CI test glob). `--invert-y` is available if Godot wants the green channel
+flipped.
+
+**Wiring (L3 / #84).** `TileSetBuilder.make_atlas_texture(diffuse, normal)`
+pairs the diffuse + normal atlases into a **`CanvasTexture`** (`diffuse_texture`
++ `normal_texture`) that backs the atlas source, so a `Light2D` shades the
+diamonds via the normal map. `build_default_terrain_tileset()` loads both from
+`TileSetConstants.ATLAS_PATH` / `NORMAL_ATLAS_PATH` — the single place the editor
+boot and the dev-menu catalog get the pairing. The world sun is a
+`DirectionalLight2D` (`src/nodes/sun_light.gd`) with tunable angle/energy/color
+that tints from the L2 `DayNight` ambient. Because the terrain diffuse is
+mid-tone and the normal map is deliberately gentle (flat grass, not authored
+height), the sun produces **fine-grained directional relief that shifts with sun
+angle** — bold per-*tile* depth is L4 (#85), and richer relief awaits authored
+art (#33).
 
 ## Import / filtering
 
@@ -104,3 +117,10 @@ The atlas relies on the project-global `default_texture_filter = 1` (Linear, no
 mipmaps): mipmaps would bleed neighbouring zero-separation atlas regions into each
 other and show seams at zoom-out. See the comment block in `project.godot`.
 Pinning this per-atlas via a committed `.import` is tracked in issue #28.
+
+**Mipmaps decision (L3 / #84): stay OFF.** The lighting epic flagged an open
+question — lighting benefits from mipmaps, but the zero-separation atlas bleeds
+region seams at zoom-out with them on. Rendering the lit terrain at **zoom 0.5**
+(min zoom, worst-case minification) showed **no seams** with mipmaps off, and
+normal-mapped `Light2D` shading does **not** require mipmaps. So the atlas keeps
+mipmaps off; no filtering changed for L3, so seams are identical to pre-lighting.
