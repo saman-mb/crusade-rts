@@ -59,8 +59,9 @@ with higher tiers catching more light.*
 
 ## Getting Started
 
-**Requires [Godot 4.4.1](https://godotengine.org/) exactly** (the version CI pins; see
-`config/features` in `project.godot`). No C#/.NET — the project is pure GDScript.
+**Requires [Godot 4.4.1](https://godotengine.org/) exactly** (the version CI pins in
+`.github/workflows/ci.yml`; `project.godot` declares the `4.4` feature line). No C#/.NET
+— the project is pure GDScript.
 
 1. Clone the repo and open it in Godot 4.4.1 (import `project.godot`), **or** launch it
    headfirst from the command line.
