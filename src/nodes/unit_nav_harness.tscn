@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://crusadenavhar01"]
+
+[ext_resource type="Script" path="res://src/nodes/unit_nav_harness.gd" id="1_navhar"]
+
+[node name="UnitNavHarness" type="Node2D"]
+script = ExtResource("1_navhar")
