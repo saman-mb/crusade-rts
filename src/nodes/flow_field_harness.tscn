@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://crusadeflowhar01"]
+
+[ext_resource type="Script" path="res://src/nodes/flow_field_harness.gd" id="1_flowhar"]
+
+[node name="FlowFieldHarness" type="Node2D"]
+script = ExtResource("1_flowhar")
