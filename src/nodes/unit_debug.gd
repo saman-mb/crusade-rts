@@ -297,11 +297,27 @@ func _issue_single_path(cell: Vector2i) -> void:
 	for id in _selection.selected_ids():
 		# Duck-typed unit node: keep it UNTYPED (see _units doc).
 		var unit = _units[id]
+		# If this unit is mid group-flow, pull it OUT of the group order first so it is
+		# not driven by both its A* path (below) and the group follower (in _process).
+		_drop_from_group(unit)
 		var wp: Array = nav.find_path(unit.current_cell(), unit.current_tier(), cell, _active_tier)
 		if wp.is_empty():
 			push_warning("unit_debug: no path for unit %d to %s tier %d" % [id, cell, _active_tier])
 			continue
 		unit.issue_path(wp)
+
+
+## Removes `unit` from the active group-flow order (all three index-aligned arrays) if
+## present, so a fresh single-unit A* move can take it over without the group `_process`
+## also driving it. No-op when the unit is not in a group order. Retires the whole order
+## once its last member leaves so `_process` goes idle.
+func _drop_from_group(unit) -> void:
+	var idx: int = _group_units.find(unit)
+	if idx == -1:
+		return
+	_group_units.remove_at(idx)
+	_group_followers.remove_at(idx)
+	_group_positions.remove_at(idx)
 
 
 ## GROUP FORMATION FLOW order (≥2 selected). Computes N distinct walkable formation

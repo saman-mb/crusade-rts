@@ -59,12 +59,14 @@ static func slots(goal: Vector2i, count: int, walkable: Callable, region: Rect2i
 	return out
 
 
-## Deterministic stable nearest assignment: returns unit_index -> slot_index (an int per
+## Deterministic greedy nearest assignment: returns unit_index -> slot_index (an int per
 ## unit, indexing into `slot_cells`). Repeatedly claims the (unit, slot) pair with the
 ## smallest squared distance among still-unassigned units and slots, ties broken by
-## (unit_index, slot_index), which minimizes crossing/total distance and is fully
-## reproducible. Assumes slot_cells.size() >= unit_cells.size(); each slot used at most
-## once. Element i of the result is the slot index assigned to unit i.
+## (unit_index, slot_index). This is a reproducible heuristic that keeps total travel low
+## and avoids obvious crossings (2-opt-stable on the fixtures) — NOT a provably optimal
+## (Hungarian) matching, but cheap and cohesive enough that units don't peel across the
+## group. Assumes slot_cells.size() >= unit_cells.size(); each slot used at most once.
+## Element i of the result is the slot index assigned to unit i.
 static func assign(unit_cells: Array[Vector2i], slot_cells: Array[Vector2i]) -> PackedInt32Array:
 	var unit_count: int = unit_cells.size()
 	var slot_count: int = slot_cells.size()
