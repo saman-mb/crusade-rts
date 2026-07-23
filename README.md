@@ -57,6 +57,14 @@ with higher tiers catching more light.*
 ![The in-game dev menu overlay — Escape pause screen with Editor/Play mode toggles and the live tileset switcher sidebar.](docs/media/dev_menu.png)
 *The Esc dev menu: Editor/Play mode switching and a live tileset swapper.*
 
+![A squad of eight units selected on the grass, each ringed by an isometric selection diamond.](docs/media/gameplay_select.png)
+*Unit control (V3): a marquee-selected squad, each unit ringed by an isometric
+selection diamond.*
+
+![The same squad mid-move, spread out by flow-field steering as it repositions toward a move order.](docs/media/gameplay_move.png)
+*Group movement: the squad repositions under flow-field steering + local avoidance
+after a move order. (Unit art is placeholder — high-res sprites land with the art epic.)*
+
 ## Getting Started
 
 **Requires [Godot 4.4.1](https://godotengine.org/) exactly** (the version CI pins in
