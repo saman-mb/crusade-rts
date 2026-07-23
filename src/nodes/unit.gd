@@ -48,7 +48,8 @@ func setup(p_map_system, cell: Vector2i, tier: int) -> void:
 	sprite.position = _state.art_offset()
 
 
-## Hand the follower a fresh waypoint list to walk (Array of Vector2 world points).
+## Hand the follower a fresh waypoint list to walk — the Array of { cell, tier }
+## dictionaries that NavGraph.find_path returns (empty Array = no route → no-op).
 func issue_path(waypoints: Array) -> void:
 	_follower.set_path(waypoints)
 
