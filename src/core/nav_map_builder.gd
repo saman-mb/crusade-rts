@@ -3,9 +3,10 @@ extends RefCounted
 ## Thin runtime adapter: turns a stack of live elevation TileMapLayers into a
 ## headless NavGraph. ALL pathfinding logic lives in the cores (NavGraph /
 ## NavTierGrid / NavPortalGraph) -- this file only reads the live TileSet API
-## (get_used_rect / get_cell_source_id) and wires the pieces together. A tile is
-## walkable on a tier iff that tier's layer paints a real tile there
-## (source_id != -1 == BrushCore.EMPTY_SOURCE_ID == no tile == hole/cliff).
+## (get_used_rect / get_cell_tile_data) and wires the pieces together. A tile is
+## walkable on a tier iff that tier's layer paints a real tile there AND that
+## tile's `walkable` custom data is true (see walkable_query); an empty cell
+## (no tile == hole/cliff) or a tile flagged unwalkable (e.g. water) is solid.
 
 ## Union of every layer's get_used_rect(). Nulls and cell-less layers are
 ## skipped (a painted-nothing layer reports a 0-size rect that would wrongly

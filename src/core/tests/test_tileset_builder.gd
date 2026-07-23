@@ -99,7 +99,7 @@ func _test_water_animation(src: TileSetAtlasSource) -> void:
 ## Per-tile walkability (#96): the TYPE_BOOL "walkable" custom-data layer exists,
 ## every ground (LOOKUP) tile is walkable, and the water tile is not.
 func _test_walkable_layer(ts: TileSet, src: TileSetAtlasSource) -> void:
-	_ok(ts.get_custom_data_layers_count() >= 1, "no custom-data layers registered")
+	_ok(ts.get_custom_data_layers_count() == 1, "exactly one custom-data layer registered")
 	var idx: int = ts.get_custom_data_layer_by_name(TileSetConstants.WALKABLE_LAYER)
 	_ok(idx != -1, "no custom-data layer named %s" % TileSetConstants.WALKABLE_LAYER)
 	if idx == -1:
