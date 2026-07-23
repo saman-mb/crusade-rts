@@ -36,6 +36,7 @@ const CAMERA_BOUNDS_PAD_CELLS := 3
 	$Elevation2,
 ]
 @onready var objects_layer: TileMapLayer = $Objects
+@onready var entity_layers: Array[Node2D] = [$EntityTier0, $EntityTier1, $EntityTier2]
 
 func _ready() -> void:
 	_apply_elevation_offsets()
@@ -77,6 +78,21 @@ func get_elevation_layer(level: int) -> TileMapLayer:
 	if level < 0 or level >= elevation_layers.size():
 		return null
 	return elevation_layers[level]
+
+## Returns the per-tier entity container Node2D for `tier`, or null if out of range.
+## The containers are plain Y-sorted Node2Ds at the origin (no lift, no
+## y_sort_origin — a Node2D has none). Entities (units, elevated props) parent
+## here and set `position = EntityPlacement.ground_position(cell)` (the unlifted
+## footprint), so they sort at the same depth as that tier's floor tile; the tier
+## lift is applied as a VISUAL offset on the entity's art
+## (EntityPlacement.visual_offset(tier)), never to the node origin. The per-tier
+## split is organizational (know a unit's tier by its parent; reparent on a ramp),
+## not a sorting mechanism — every tier container shares the one Y-sort space of
+## the map root. See docs/ENTITY_SORTING.md. (#107)
+func entity_parent_for_tier(tier: int) -> Node2D:
+	if tier < 0 or tier >= entity_layers.size():
+		return null
+	return entity_layers[tier]
 
 ## Cell-space union of every layer's used region (elevation stack + objects).
 ## All layers share one cell grid, so their rects merge directly. Empty layers

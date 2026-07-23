@@ -34,6 +34,15 @@ y_sort_origin = 64
 [node name="Objects" type="TileMapLayer" parent="."]
 y_sort_enabled = true
 
+[node name="EntityTier0" type="Node2D" parent="."]
+y_sort_enabled = true
+
+[node name="EntityTier1" type="Node2D" parent="."]
+y_sort_enabled = true
+
+[node name="EntityTier2" type="Node2D" parent="."]
+y_sort_enabled = true
+
 [node name="Camera" parent="." instance=ExtResource("2_rtscam")]
 
 [node name="MapEditor" parent="." instance=ExtResource("3_mapedit")]
