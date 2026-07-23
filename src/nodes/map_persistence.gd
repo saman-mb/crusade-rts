@@ -21,11 +21,10 @@ extends Node2D
 ## Seconds between mtime polls.
 @export var auto_reload_interval: float = 1.0
 
-## The resolved MapSystem node. Left UNTYPED on purpose so its
-## `get_elevation_layer()` / `elevation_layers` API is duck-typed: MapSystem
-## carries no `class_name`, and a static `Node` type would make the 4.4 analyzer
-## reject those calls ("not found in base Node") and fail the whole script load.
-var _map_system
+## The resolved MapSystem node. Typed via class_name (#105): its
+## `get_elevation_layer()` / `elevation_layers` / `objects_layer` API resolves
+## statically on the MapSystem type.
+var _map_system: MapSystem
 ## Live TileSet the MapEditor built, shared across the elevation layers.
 var _tile_set: TileSet
 ## Last-seen modified time of `current_map_path`, for auto-reload polling.
@@ -43,7 +42,7 @@ func _ready() -> void:
 
 
 func _setup() -> void:
-	_map_system = get_node_or_null(map_system_path)
+	_map_system = get_node_or_null(map_system_path) as MapSystem
 	if _map_system == null:
 		push_warning("map_persistence: map_system_path unresolved; persistence is inert.")
 		return
@@ -64,13 +63,12 @@ func _layers() -> Array[TileMapLayer]:
 	return empty
 
 
-## The MapSystem's Objects overlay layer, or null when unbound / absent. Duck-typed
-## (MapSystem carries no class_name); `get("objects_layer")` returns null rather
-## than erroring if an older scene has no such property.
+## The MapSystem's Objects overlay layer, or null when unbound. Typed via
+## class_name (#105): the `objects_layer` property resolves on the MapSystem type.
 func _objects() -> TileMapLayer:
 	if _map_system == null:
 		return null
-	return _map_system.get("objects_layer") as TileMapLayer
+	return _map_system.objects_layer
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -98,9 +96,13 @@ func _reload() -> void:
 		return
 	var res := MapLoader.load_map(r["text"], _layers(), _objects(), _tile_set)
 	print("[MapPersistence] reloaded %s (ok=%s, %d diagnostics)" % [current_map_path, res["ok"], (res["diagnostics"] as Array).size()])
-	# The freshly-loaded extent replaces whatever was painted, so re-derive the
-	# camera clamp bounds from it (#17). Duck-typed; MapSystem carries no class_name.
-	_map_system.refresh_camera_bounds()
+	# The freshly-loaded extent replaces whatever was painted. Announce it through the
+	# MapSystem hub (#95): the camera clamp is now a map_changed SUBSCRIBER, so this no
+	# longer pokes refresh_camera_bounds() by name (#17 bounds still refresh, via the
+	# signal). Only emit on a successful load -- a refused load (e.g. out-of-range
+	# elevation, #106) leaves the layers untouched, so there is nothing to announce.
+	if res["ok"]:
+		_map_system.emit_map_changed_all()
 	_last_mtime = MapFileIO.modified_time(current_map_path)
 
 

@@ -1,3 +1,4 @@
+class_name MapEditor
 extends Node2D
 ## In-game brush editor: translates mouse input into `BrushCore` decisions that
 ## are applied to the active elevation `TileMapLayer` of a `MapSystem`.
@@ -36,19 +37,14 @@ const UNDO_HISTORY := 64
 const FILL_MARGIN := 4
 ## Hard cap on a single bucket-fill region size -- a safety valve against runaway fills.
 const FILL_MAX_CELLS := 4096
-## Ceiling on the contiguous elevation-layer probe in `_layer_count()` -- a safety
-## bound so the count loop can never run away if a map ever exposes an unbounded or
-## erroring layer accessor.
-const ELEVATION_PROBE_CAP := 16
 ## Corner mask of the fully-filled dual-grid tile (TL|TR|BL|BR = 1|2|4|8 = 15). Its
 ## `TileSetConstants.LOOKUP` entry -- Vector2i(3, 3) -- is the editor's default brush.
 const FILLED_TILE_MASK := 15
 
-## The resolved MapSystem node. Left UNTYPED on purpose so its
-## `get_elevation_layer()` / `elevation_layers` API is duck-typed: MapSystem
-## carries no `class_name`, and a static `Node` type would make the 4.4 analyzer
-## reject those calls ("not found in base Node") and fail the whole script load.
-var _map_system
+## The resolved MapSystem node. Typed via class_name (#105): its
+## `get_elevation_layer()` / `tier_count()` / `elevation_layers` API resolves
+## statically on the MapSystem type.
+var _map_system: MapSystem
 ## Active elevation tier index the brush writes to.
 var _active_level: int = 0
 ## The TileMapLayer for `_active_level` (null when out of range / no map).
@@ -93,7 +89,7 @@ func _ready() -> void:
 
 func _setup() -> void:
 	_undo.set_max_steps(UNDO_HISTORY)
-	_map_system = get_node_or_null(map_system_path)
+	_map_system = get_node_or_null(map_system_path) as MapSystem
 	if _map_system == null:
 		push_warning("map_editor: map_system_path unresolved; editor is inert.")
 		return
@@ -149,18 +145,14 @@ func _set_active_level(level: int) -> void:
 	_preview.position = MapConstants.elevation_offset(_active_level)
 
 
-## Counts the contiguous non-null elevation layers from level 0 (probe capped).
-## Returns 0 when the editor is inert (`_map_system` unresolved), so every caller
-## -- including rebind_tileset()'s layer loop -- stays null-safe.
+## The number of elevation tiers, sourced from MapSystem.tier_count() (#105 --
+## the single source of truth for layer discovery). Returns 0 when the editor is
+## inert (`_map_system` unresolved), so every caller -- including
+## rebind_tileset()'s layer loop -- stays null-safe.
 func _layer_count() -> int:
 	if _map_system == null:
 		return 0
-	var count := 0
-	for i in range(ELEVATION_PROBE_CAP):
-		if _map_system.get_elevation_layer(i) == null:
-			break
-		count += 1
-	return count
+	return _map_system.tier_count()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -222,11 +214,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			if key.ctrl_pressed and key.keycode == KEY_Z and not key.shift_pressed:
 				if _undo.has_undo():
 					_undo.undo()
+					# History move mutated the map -- announce it through the hub (#95).
+					# The reverted cells/tier aren't tracked, so emit a whole-map change.
+					if _map_system != null:
+						_map_system.emit_map_changed_all()
 				_update_preview()
 				return
 			if (key.ctrl_pressed and key.keycode == KEY_Y) or (key.ctrl_pressed and key.shift_pressed and key.keycode == KEY_Z):
 				if _undo.has_redo():
 					_undo.redo()
+					if _map_system != null:
+						_map_system.emit_map_changed_all()
 				_update_preview()
 				return
 			# Tool select (B/I/G). from_keycode returns -1 for [/]/1-3, so those fall
@@ -246,10 +244,14 @@ func _unhandled_input(event: InputEvent) -> void:
 					_set_active_level(BrushCore.cycle_level(_active_level, -1, _layer_count()))
 				KEY_BRACKETRIGHT:
 					_set_active_level(BrushCore.cycle_level(_active_level, 1, _layer_count()))
-				KEY_1, KEY_2, KEY_3:
-					var target := key.keycode - KEY_1
-					if target < _layer_count():
-						_set_active_level(target)
+				_:
+					# Number keys 1..9 jump straight to tier 0..8, bounded by the live
+					# tier count (#106) so the hotkeys track tier_count() rather than a
+					# hardcoded KEY_1..KEY_3.
+					if key.keycode >= KEY_1 and key.keycode <= KEY_9:
+						var target := key.keycode - KEY_1
+						if target < _layer_count():
+							_set_active_level(target)
 
 
 ## Projects the mouse to a cell and applies the pure BrushCore decision to the
@@ -285,8 +287,21 @@ func _apply_at_mouse(mode: BrushCore.Mode) -> void:
 ## execute=false (stroke already applied live during the drag). SDET: verify signature.
 func _end_stroke(action_name: String, active: bool) -> void:
 	if active and _stroke != null and not _stroke.is_empty():
+		var changes := _stroke.changes()
 		_stroke.commit(_undo, action_name, Callable(_active_layer, "set_cell"))
+		# Announce the mutation on the active tier through the MapSystem hub (#95).
+		_emit_map_changed(MapChange.bounds_of_changes(changes), _active_level)
 	_stroke = null
+
+
+## Emits `map_changed` on the MapSystem hub for a single-tier edit (#95): `rect` is
+## the affected cells' bounding box, `tier` the elevation level that changed. No-op
+## when the editor is inert (`_map_system` unresolved).
+func _emit_map_changed(rect: Rect2i, tier: int) -> void:
+	if _map_system == null:
+		return
+	var tiers: Array[int] = [tier]
+	_map_system.map_changed.emit(rect, tiers)
 
 
 ## EYEDROPPER: samples the tile under the cursor from the ACTIVE elevation layer into the
@@ -328,7 +343,10 @@ func _bucket_fill_at_mouse() -> void:
 		stroke.record(cell, match_src, match_atlas, _source_id, _atlas_coords)
 		_active_layer.set_cell(cell, _source_id, _atlas_coords)
 	if not stroke.is_empty():
+		var changes := stroke.changes()
 		stroke.commit(_undo, "Bucket Fill", Callable(_active_layer, "set_cell"))
+		# Announce the fill on the active tier through the MapSystem hub (#95).
+		_emit_map_changed(MapChange.bounds_of_changes(changes), _active_level)
 	_update_preview()
 
 

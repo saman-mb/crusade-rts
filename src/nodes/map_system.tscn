@@ -19,31 +19,6 @@ script = ExtResource("6_daynight")
 [node name="Sun" type="DirectionalLight2D" parent="."]
 script = ExtResource("7_sun")
 
-[node name="Elevation0" type="TileMapLayer" parent="."]
-y_sort_enabled = true
-
-[node name="Elevation1" type="TileMapLayer" parent="."]
-position = Vector2(0, -32)
-y_sort_enabled = true
-y_sort_origin = 32
-
-[node name="Elevation2" type="TileMapLayer" parent="."]
-position = Vector2(0, -64)
-y_sort_enabled = true
-y_sort_origin = 64
-
-[node name="Objects" type="TileMapLayer" parent="."]
-y_sort_enabled = true
-
-[node name="EntityTier0" type="Node2D" parent="."]
-y_sort_enabled = true
-
-[node name="EntityTier1" type="Node2D" parent="."]
-y_sort_enabled = true
-
-[node name="EntityTier2" type="Node2D" parent="."]
-y_sort_enabled = true
-
 [node name="UnitDebug" type="Node2D" parent="."]
 script = ExtResource("8_unitdebug")
 map_system_path = NodePath("..")

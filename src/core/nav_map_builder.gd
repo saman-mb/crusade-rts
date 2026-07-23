@@ -142,8 +142,12 @@ static func _merge_cell(region: Rect2i, cell: Vector2i) -> Rect2i:
 		return one
 	return region.merge(one)
 
-## The tier-ordered layer stack of a duck-typed map_system: its `elevation_layers`
-## Array when present, else get_elevation_layer(i) probed from 0 until null.
+## The tier-ordered layer stack of a map_system. Prefers its `elevation_layers`
+## Array (the primary, allocation-cheap path -- MapSystem and the pure-nav test
+## stubs both expose it, so the core stays tolerant of a plain-Array stand-in and
+## never hard-requires a MapSystem type). Falls back to get_elevation_layer(i),
+## bounded by tier_count() when the map exposes the typed accessor (#105) and
+## otherwise terminated by the first null return.
 static func _collect_layers(map_system) -> Array:
 	var out: Array = []
 	var raw = map_system.get("elevation_layers")
@@ -152,8 +156,11 @@ static func _collect_layers(map_system) -> Array:
 			out.append(layer)
 		return out
 	if map_system.has_method("get_elevation_layer"):
+		var has_count: bool = map_system.has_method("tier_count")
 		var i := 0
-		while i < 4096:  # hard cap: a null return is the real terminator.
+		while true:
+			if has_count and i >= int(map_system.tier_count()):
+				break
 			var layer = map_system.get_elevation_layer(i)
 			if layer == null:
 				break

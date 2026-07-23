@@ -63,6 +63,26 @@ static func _load(text: String, elevation_layers: Array[TileMapLayer], objects_l
 	if not validated["ok"]:
 		return {"ok": false, "diagnostics": validated["diagnostics"]}
 
+	var doc: Dictionary = validated["data"]
+	var doc_layers: Array = doc.get(MapSchema.KEY_LAYERS, [])
+	var diagnostics: Array = validated["diagnostics"]
+
+	# Resolve every doc layer to its physical target BEFORE mutating anything, so a
+	# fatal routing error (an out-of-range elevation, #106) aborts the whole load
+	# with ok=false and leaves the live layers untouched -- rather than half-clearing
+	# them and then bailing. Each job pairs a doc layer with its resolved target.
+	var jobs: Array = []
+	for layer_dict in doc_layers:
+		if typeof(layer_dict) != TYPE_DICTIONARY:
+			continue
+		var resolved := _resolve_target(layer_dict, elevation_layers, objects_layer, diagnostics)
+		if not resolved["ok"]:
+			return {"ok": false, "diagnostics": [resolved["error"]]}
+		var target: TileMapLayer = resolved["target"]
+		if target == null:  # a legitimate skip (e.g. objects-kind with no overlay), already logged
+			continue
+		jobs.append({"dict": layer_dict, "target": target})
+
 	# Clear every provided target FIRST, so a layer absent from the doc is still emptied.
 	for layer in elevation_layers:
 		if layer != null:
@@ -70,16 +90,9 @@ static func _load(text: String, elevation_layers: Array[TileMapLayer], objects_l
 	if objects_layer != null:
 		objects_layer.clear()
 
-	var doc: Dictionary = validated["data"]
-	var doc_layers: Array = doc.get(MapSchema.KEY_LAYERS, [])
-	var diagnostics: Array = validated["diagnostics"]
-
-	for layer_dict in doc_layers:
-		if typeof(layer_dict) != TYPE_DICTIONARY:
-			continue
-		var target := _resolve_target(layer_dict, elevation_layers, objects_layer, diagnostics)
-		if target == null:
-			continue
+	for job in jobs:
+		var target: TileMapLayer = job["target"]
+		var layer_dict: Dictionary = job["dict"]
 		for cell in layer_dict.get(MapSchema.KEY_CELLS, []):
 			if typeof(cell) != TYPE_DICTIONARY:
 				continue
@@ -93,22 +106,29 @@ static func _load(text: String, elevation_layers: Array[TileMapLayer], objects_l
 
 	return {"ok": true, "diagnostics": diagnostics}
 
-## Resolves the physical TileMapLayer one doc layer paints into, or null (with a
-## diagnostic) when it cannot be routed. Object-kind layers go to objects_layer;
-## everything else routes by elevation into elevation_layers. A doc written before
-## the `kind` field defaults to terrain, so old files still route by elevation.
-static func _resolve_target(layer_dict: Dictionary, elevation_layers: Array[TileMapLayer], objects_layer: TileMapLayer, diagnostics: Array) -> TileMapLayer:
+## Resolves the physical TileMapLayer one doc layer paints into. Returns
+## { "ok": bool, "target": TileMapLayer, "error": String }.
+##   * ok == false is a FATAL routing error that aborts the whole load: currently
+##     an out-of-range elevation (#106). A map referencing a tier this build lacks
+##     is a hard load failure, NOT a silent drop -- the tier count is authoritative
+##     (MapConstants.TIER_COUNT), so a mismatch means the file is incompatible.
+##   * ok == true with target == null is a legitimate skip (an objects-kind layer
+##     with no objects overlay, or a null physical layer), logged as a diagnostic.
+## Object-kind layers route to objects_layer; everything else routes by elevation
+## into elevation_layers. A doc written before the `kind` field defaults to terrain,
+## so old files still route by elevation.
+static func _resolve_target(layer_dict: Dictionary, elevation_layers: Array[TileMapLayer], objects_layer: TileMapLayer, diagnostics: Array) -> Dictionary:
 	var kind := String(layer_dict.get(MapSchema.KEY_LAYER_KIND, MapSchema.LAYER_KIND_TERRAIN))
 	if kind == MapSchema.LAYER_KIND_OBJECTS:
 		if objects_layer == null:
 			diagnostics.append("objects-kind layer in doc but no objects target -- skipped")
-			return null
-		return objects_layer
+			return {"ok": true, "target": null, "error": ""}
+		return {"ok": true, "target": objects_layer, "error": ""}
 	var elevation := int(layer_dict.get(MapSchema.KEY_LAYER_ELEVATION, 0))
 	if elevation < 0 or elevation >= elevation_layers.size():
-		diagnostics.append("layer elevation %d out of range -- skipped" % elevation)
-		return null
+		return {"ok": false, "target": null,
+			"error": "layer elevation %d out of range [0, %d) -- load aborted (#106)" % [elevation, elevation_layers.size()]}
 	var target: TileMapLayer = elevation_layers[elevation]
 	if target == null:
 		diagnostics.append("layer elevation %d target is null -- skipped" % elevation)
-	return target
+	return {"ok": true, "target": target, "error": ""}

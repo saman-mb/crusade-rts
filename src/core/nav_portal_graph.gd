@@ -52,42 +52,25 @@ func _init(p_region: Rect2i, tier_grids: Array, ramps: Array) -> void:
 ## of endpoints on `t` that the tier grid reports mutually reachable.
 ##
 ## Reachability within a tier is an equivalence relation (the grid is undirected),
-## so endpoints partition into reachable components and each component is a clique.
-## We exploit that with union-find (#63): a pair already in the same component is
-## known-reachable and is connected WITHOUT another A* query; only cross-component
-## pairs pay for a reachable() call, and a successful one merges the components.
-## Net: at most one A* per edge that grows a component, instead of one per pair.
-## Semantics are unchanged -- every mutually-reachable pair still gets its edge.
+## so endpoints partition into reachable components. NavTierGrid precomputes those
+## components ONCE at build (#104), so two endpoints are mutually reachable exactly
+## when they share a component label -- a direct O(1) component_of compare, no A*
+## per pair and no throwaway union-find here. Semantics are unchanged: every
+## mutually-reachable pair still gets its edge (and only those).
 func _wire_tier_edges(t: int, tier_grids: Array) -> void:
 	if t < 0 or t >= tier_grids.size():
 		return
 	var grid: NavTierGrid = tier_grids[t]
 	var ids: Array[int] = endpoints_on_tier(t)
-	var parent: Dictionary = {}
-	for id: int in ids:
-		parent[id] = id
 	for i in range(ids.size()):
 		for j in range(i + 1, ids.size()):
 			var a: int = ids[i]
 			var b: int = ids[j]
-			var connected: bool = _find(parent, a) == _find(parent, b)
-			if not connected:
-				connected = grid.reachable(_info[a]["cell"], _info[b]["cell"])
-				if connected:
-					parent[_find(parent, a)] = _find(parent, b)
-			if connected:
+			var a_cell: Vector2i = _info[a]["cell"]
+			var b_cell: Vector2i = _info[b]["cell"]
+			var a_comp: int = grid.component_of(a_cell)
+			if a_comp != NavTierGrid.NO_COMPONENT and a_comp == grid.component_of(b_cell):
 				_astar.connect_points(a, b, true)
-
-## Union-find root of `x` with path compression (see _wire_tier_edges).
-func _find(parent: Dictionary, x: int) -> int:
-	var root: int = x
-	while parent[root] != root:
-		root = parent[root]
-	while parent[x] != root:
-		var nxt: int = parent[x]
-		parent[x] = root
-		x = nxt
-	return root
 
 ## Re-derives ONLY tier `t`'s intra-tier edges from the (rebuilt) tier grid,
 ## leaving cross-tier ramp edges and every other tier's edges untouched (#59).
