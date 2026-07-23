@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw
 
 # --- Layout constants (mirror tileset_constants.gd) ---
 REGION_W, REGION_H = 128, 64
-ATLAS_W, ATLAS_H = 512, 320
+ATLAS_W, ATLAS_H = 512, 384
 SS = 4  # supersample factor for anti-aliasing
 
 # --- Flat-shaded placeholder palette ---
@@ -40,6 +40,9 @@ WATER_FRAMES = [
 	(80, 148, 214, 255),
 	(104, 176, 232, 255),
 ]
+# Ramp placeholder (#78): a distinct warm tan diamond at (col 0, row 5) so the
+# ramp tile is legible but honestly a placeholder (real art is #33).
+RAMP = (178, 150, 100, 255)
 
 
 def _region_origin(col, row):
@@ -98,6 +101,10 @@ def build_atlas():
 	for col in range(4):
 		ox, oy = _region_origin(col, 4)
 		_draw_solid_diamond(draw, ox, oy, WATER_FRAMES[col])
+
+	# Row 5, col 0: placeholder ramp tile (#78).
+	ramp_ox, ramp_oy = _region_origin(0, 5)
+	_draw_solid_diamond(draw, ramp_ox, ramp_oy, RAMP)
 
 	return big.resize((ATLAS_W, ATLAS_H), Image.LANCZOS)
 

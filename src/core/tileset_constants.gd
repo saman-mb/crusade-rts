@@ -7,7 +7,7 @@ extends RefCounted
 ## placeholder atlas at assets/tilesets/terrain_atlas.png is carved into regions.
 
 const REGION_SIZE := Vector2i(128, 64)          ## == MapConstants.TILE_SIZE; HD 2:1 diamond
-const ATLAS_PX := Vector2i(512, 320)            ## 4 cols x 5 rows of 128x64 regions
+const ATLAS_PX := Vector2i(512, 384)            ## 4 cols x 6 rows of 128x64 regions (row 5 = ramp tile)
 const DUALGRID_ORIGIN := Vector2i(0, 0)         ## atlas coord of the 4x4 dual-grid block's top-left cell
 
 ## Committed atlas assets. ATLAS_PATH is the diffuse art; NORMAL_ATLAS_PATH is the
@@ -30,6 +30,17 @@ const NON_WALKABLE_COORDS: Array[Vector2i] = [WATER_ANIM_COORDS]
 ## True when a tile at `coord` is walkable (i.e. not in the exceptions allowlist).
 static func coord_walkable(coord: Vector2i) -> bool:
 	return not NON_WALKABLE_COORDS.has(coord)
+
+## Per-tile ramp flag, exposed as a second TYPE_BOOL TileSet custom-data layer the
+## builder populates. A ramp tile marks a low<->high tier transition; NavMapBuilder
+## derives NavRamps from painted ramp tiles (#78). Painted on the HIGH tier at the
+## transition cell; the ramp tile is itself walkable (a unit stands on it).
+const RAMP_LAYER := "ramp"
+const RAMP_COORDS: Array[Vector2i] = [Vector2i(0, 5)]   ## atlas coord(s) of the ramp tile(s), row 5
+
+## True when a tile at `coord` is a ramp tile.
+static func coord_ramp(coord: Vector2i) -> bool:
+	return RAMP_COORDS.has(coord)
 
 const WATER_FRAMES := 4
 const WATER_COLUMNS := 4

@@ -22,11 +22,12 @@ extends Node2D
 ## hit (or clears on a miss); RIGHT-click iterates `Selection.selected_ids()` and
 ## paths each unit. Highlights are re-driven from the selection after every change.
 ##
-## Ramps are HAND-FED via `set_ramps` (empty by default) until B1 derives them from
-## the map; the harness/injector supplies a `NavRamp` list. The `NavGraph` is rebuilt
-## from scratch on every MOVE (`NavMapBuilder.from_map_system`) — the debug map is
-## tiny, so a per-order rebuild is cheaper than maintaining incremental nav state, and
-## it always reflects the latest painted terrain.
+## Ramps are DERIVED from painted ramp tiles on the map by `NavMapBuilder.from_map_system`
+## (#78 B1); `set_ramps` is now an optional debug OVERRIDE (empty by default) whose
+## `NavRamp` list is overlaid on top of the derived ramps, not the source of them. The
+## `NavGraph` is rebuilt from scratch on every MOVE (`NavMapBuilder.from_map_system`) —
+## the debug map is tiny, so a per-order rebuild is cheaper than maintaining incremental
+## nav state, and it always reflects the latest painted terrain.
 ##
 ## Like `MapEditor` this is a RUNTIME node (not `@tool`), so none of it executes during
 ## a headless `--import` in CI.
@@ -38,8 +39,9 @@ const NO_CELL := Vector2i(-2147483648, -2147483648)
 ## Path to the MapSystem node this hook spawns units into and pathfinds across.
 @export var map_system_path: NodePath
 
-## Hand-fed `NavRamp` list threaded into every `NavGraph` rebuild. Empty by default;
-## the harness/injector sets it via `set_ramps` until B1 derives ramps from the map.
+## Optional debug OVERRIDE `NavRamp` list overlaid on top of the ramps `NavMapBuilder`
+## derives from painted ramp tiles (#78 B1). Empty by default; the harness/injector may
+## set it via `set_ramps` to append extra ramps to the derived set.
 var _ramps: Array = []
 
 ## The resolved MapSystem node. Left UNTYPED on purpose so its `get_elevation_layer()`
@@ -172,7 +174,10 @@ func _refresh_highlights() -> void:
 		unit.set_selected(_selection.is_selected(id))
 
 
-## Injects the hand-fed ramp list used by later `NavGraph` rebuilds (harness hook).
+## Injects an optional debug OVERRIDE ramp list, overlaid on top of the ramps derived
+## from painted ramp tiles in later `NavGraph` rebuilds (#78 B1; harness hook). Passed as
+## `NavMapBuilder.from_map_system`'s `extra_ramps` param, so these are appended to — not a
+## replacement for — the derived ramps.
 func set_ramps(ramps: Array) -> void:
 	_ramps = ramps
 

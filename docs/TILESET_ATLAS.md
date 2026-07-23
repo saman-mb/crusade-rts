@@ -12,7 +12,7 @@ human-readable mirror of those constants — if you change one, change the other
 | Constant | Value | Meaning |
 |---|---|---|
 | `REGION_SIZE` | `128 × 64` px | One tile region (HD 2:1 isometric diamond; equals `MapConstants.TILE_SIZE`) |
-| `ATLAS_PX` | `512 × 320` px | Whole atlas = **4 columns × 5 rows** of regions |
+| `ATLAS_PX` | `512 × 384` px | Whole atlas = **4 columns × 6 rows** of regions (row 5 = ramp tile) |
 | `DUALGRID_ORIGIN` | `(0, 0)` | Atlas cell of the 4×4 dual-grid block's top-left |
 
 Atlas **cell** coordinates below are `(col, row)`, each cell being one
@@ -69,6 +69,23 @@ Frames run left→right from `WATER_ANIM_COORDS`, wrapping downward every
 The whole strip must fit inside the region grid — `test_animation_bounds_independent`
 fails if `WATER_FRAMES`/`WATER_COLUMNS`/`WATER_ANIM_COORDS` push it past the edge.
 
+## Ramp tile — row 5
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `RAMP_COORDS` | `[(0, 5)]` | Atlas cell(s) of the ramp tile(s), row 5 col 0 |
+| `RAMP_LAYER` | `"ramp"` | Name of the `TYPE_BOOL` custom-data layer the builder populates |
+
+Cell `(0, 5)` is the **ramp tile**. Like walkability it carries a per-tile
+`ramp` `TYPE_BOOL` custom-data flag (a second layer alongside `walkable`), set
+`true` for cells in `RAMP_COORDS`. A ramp tile is painted **on the HIGH tier at a
+transition cell** and marks a low↔high cross-tier connection:
+`NavMapBuilder.ramps_from_layers` derives a `NavRamp` from each painted ramp tile
+to each walkable cartesian-neighbor cell on the tier below (#78). The ramp tile is
+itself **walkable** (a unit stands on it) — it is deliberately *not* in
+`NON_WALKABLE_COORDS`, so `coord_walkable((0, 5))` is already `true`. Placeholder
+art for now; real ramp/cliff art is authored under #33.
+
 ## Per-tile origin
 
 `TEXTURE_ORIGIN` is `(0, 0)`: art that is centered on the cell origin and exactly
@@ -92,7 +109,7 @@ luminance, **region-aware**: each 128×64 region is processed in isolation so
 gradients never bleed across the zero-separation region borders, texels outside
 the diamond (low diffuse alpha) are forced neutral `(128,128,255)`, and each
 region's 1px border is neutralised. A flat region therefore encodes uniform
-`(128,128,255)`. The output (`terrain_atlas_n.png`, `512×320` RGB) is a **CC0
+`(128,128,255)`. The output (`terrain_atlas_n.png`, `512×384` RGB) is a **CC0
 derivative** of the CC0 diffuse atlas. Invariants are covered by
 `tools/test_gen_normal_atlas.py` (run manually — Python tools are outside the
 Godot CI test glob). `--invert-y` is available if Godot wants the green channel

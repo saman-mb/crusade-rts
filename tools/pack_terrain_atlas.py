@@ -35,7 +35,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
 # --- Layout constants (mirror tileset_constants.gd) ---
 REGION_W, REGION_H = 128, 64
-ATLAS_W, ATLAS_H = 512, 320
+ATLAS_W, ATLAS_H = 512, 384
 SS = 4                      # supersample factor for anti-aliasing
 FEATHER_PX = 3.0            # grass<->dirt seam softness, in final-res pixels
 
@@ -45,6 +45,9 @@ GRASS_CELL = (1, 3)        # a clean, fully-grass cell of the Grass A->Dirt A sh
 DIRT_CELL = (1, 4)         # the matching fully-dirt cell
 WATER_COLS, WATER_ROWS = 8, 6
 WATER_BRIGHTNESS = [0.85, 0.95, 1.05, 1.15]  # 4-frame ramp
+# Ramp placeholder (#78): a distinct warm tan diamond at (col 0, row 5) so the
+# ramp tile is legible but honestly a placeholder (real art is #33).
+RAMP_COLOR = (178, 150, 100)
 
 
 def _crop_cell(sheet, cols, rows, col, row):
@@ -112,6 +115,14 @@ def _water_tile(water_cell_ss, dia_ss, brightness):
     return tile
 
 
+def _solid_tile(color, dia_ss):
+    """Flat-color diamond tile clipped to the diamond alpha (placeholder art)."""
+    rgb = Image.new("RGB", (REGION_W * SS, REGION_H * SS), color)
+    tile = rgb.convert("RGBA")
+    tile.putalpha(dia_ss)
+    return tile
+
+
 def _pick_water_cell(water_sheet):
     """Deterministically pick the most water-dominant cell (max mean B - R)."""
     best, best_score = None, None
@@ -153,6 +164,10 @@ def build_atlas(sources_dir):
     for col in range(4):
         tile = _water_tile(water_ss, dia_ss, WATER_BRIGHTNESS[col])
         big.alpha_composite(tile, (col * REGION_W * SS, 4 * REGION_H * SS))
+
+    # Row 5, col 0: placeholder ramp tile (#78).
+    ramp_tile = _solid_tile(RAMP_COLOR, dia_ss)
+    big.alpha_composite(ramp_tile, (0, 5 * REGION_H * SS))
 
     return big.resize((ATLAS_W, ATLAS_H), Image.LANCZOS)
 

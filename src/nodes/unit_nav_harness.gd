@@ -15,7 +15,7 @@ extends Node2D
 ## straight from production), strips the interactive/time-varying nodes for a
 ## clean deterministic render, paints an unambiguous tier-0 apron + tier-1
 ## platform (+ a small tier-2 block so the full stack reads), defines ONE real
-## `NavRamp` matching the painted geometry, spawns a real `Unit`, asks the real
+## ramp DERIVED from a painted ramp tile (#78), spawns a real `Unit`, asks the real
 ## `NavGraph` for the route, and issues it. Once the path is issued the Unit's
 ## own `_process` steers it every frame — the ORCHESTRATOR controls capture
 ## timing purely by how many frames it lets the scene run before screenshotting:
@@ -179,6 +179,12 @@ func _paint_terrain(map_system) -> void:
 	_fill_block(elevation1, source_id, fill, PLATFORM_X0, PLATFORM_X1, PLATFORM_Y0, PLATFORM_Y1)
 	_fill_block(elevation2, source_id, fill, BLOCK_X0, BLOCK_X1, BLOCK_Y0, BLOCK_Y1)
 
+	# Paint the RAMP TILE at the high transition cell (overwriting the platform's
+	# plain ground there). NavMapBuilder derives the NavRamp from this painted tile
+	# (#78) — its one walkable tier-0 cartesian neighbour is the low apron cell
+	# (4,3) — so nothing is hand-fed; the cross-tier link comes from the map itself.
+	elevation1.set_cell(RAMP_HIGH_CELL, source_id, TileSetConstants.RAMP_COORDS[0])
+
 
 ## Fills an inclusive cell rectangle [x0..x1] x [y0..y1] of a layer with one tile.
 func _fill_block(layer: TileMapLayer, source_id: int, atlas: Vector2i, x0: int, x1: int, y0: int, y1: int) -> void:
@@ -205,15 +211,15 @@ func _spawn_unit(map_system):
 	return unit
 
 
-## Builds the real NavGraph over the painted stack + our one ramp, asks for the
-## cross-tier route from the spawn (tier 0) to the goal (tier 1), and issues it to
-## the unit. From here the Unit's own `_process` steers along the waypoints every
-## frame (#76) — the orchestrator screenshots mid-climb vs arrived by frame count.
-## An empty route means the ramp/painting don't line up — a real scenario bug —
+## Builds the real NavGraph over the painted stack — with the ramp DERIVED from the
+## painted ramp tile (no hand-fed NavRamp, #78) — asks for the cross-tier route from
+## the spawn (tier 0) to the goal (tier 1), and issues it to the unit. From here the
+## Unit's own `_process` steers along the waypoints every frame (#76) — the
+## orchestrator screenshots mid-climb vs arrived by frame count. An empty route means
+## the ramp tile / painting don't line up (a real scenario bug) or derivation broke —
 ## so it is surfaced loudly rather than silently rendering a stationary unit.
 func _issue_climb_path(map_system, unit) -> void:
-	var ramp := NavRamp.new(RAMP_LOW_CELL, RAMP_LOW_TIER, RAMP_HIGH_CELL, RAMP_HIGH_TIER)
-	var nav: NavGraph = NavMapBuilder.from_map_system(map_system, [ramp])
+	var nav: NavGraph = NavMapBuilder.from_map_system(map_system)
 	if nav == null:
 		push_error("unit_nav_harness: NavMapBuilder returned no graph.")
 		return
