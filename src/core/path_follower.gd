@@ -87,11 +87,22 @@ func is_done() -> bool:
 ## reports the new world position plus the unit's (possibly handed-off) grid
 ## occupancy.
 ##
-## Returns { "pos": Vector2, "cell": Vector2i, "tier": int, "done": bool }.
+## Returns { "pos": Vector2, "cell": Vector2i, "tier": int, "done": bool,
+##           "from_tier": int, "to_tier": int, "tier_progress": float }.
+##
+## The last three describe the CURRENT segment for smooth cross-tier RENDERING (#79):
+## `from_tier` is the tier the unit is on (== the returned occupancy `tier`), `to_tier`
+## is the tier of the waypoint being steered toward, and `tier_progress` in [0,1] is
+## how far along that segment `pos` has travelled. On a ramp these differ and progress
+## sweeps 0->1, so a renderer can interpolate the elevation offset (ElevationLerp)
+## instead of snapping it at the tier handoff. On a flat segment from_tier == to_tier
+## (no visual change). They are ADDITIVE: existing callers reading pos/cell/tier/done
+## are unaffected.
 ##
 ## Contract:
 ## - Done, empty path, or `delta <= 0`: returns `current_pos` unchanged with the
-##   current active cell/tier -- NO drift, no spurious handoff.
+##   current active cell/tier -- NO drift, no spurious handoff. from_tier == to_tier ==
+##   the active tier and tier_progress == 1.0 (settled; nothing to interpolate).
 ## - Otherwise a distance budget `remaining = speed * delta` is spent walking
 ##   toward successive waypoints. The loop lets one big `delta` consume several
 ##   close waypoints in a single call without overshooting any of them.
@@ -103,6 +114,9 @@ func advance(current_pos: Vector2, delta: float) -> Dictionary:
 			"cell": _active_cell,
 			"tier": _active_tier,
 			"done": _done,
+			"from_tier": _active_tier,
+			"to_tier": _active_tier,
+			"tier_progress": 1.0,
 		}
 
 	var pos: Vector2 = current_pos
@@ -144,9 +158,32 @@ func advance(current_pos: Vector2, delta: float) -> Dictionary:
 			remaining = 0.0
 			break
 
+	# Describe the CURRENT segment for smooth cross-tier rendering (#79). The segment
+	# runs from the unit's occupancy (`_active_cell/_active_tier`, the last waypoint
+	# REACHED) toward `_waypoints[_index]` (the one still being steered to). `pos`'s
+	# fraction along that lifted line is the ramp-crossing progress a renderer feeds
+	# ElevationLerp. When done / no target remains, the segment is flat at the active
+	# tier (progress 1.0) so the offset resolves to the discrete tier height.
+	var from_tier: int = _active_tier
+	var to_tier: int = _active_tier
+	var tier_progress: float = 1.0
+	if not _done and _index < _waypoints.size():
+		var tgt: Dictionary = _waypoints[_index]
+		var tgt_cell: Vector2i = tgt["cell"]
+		var tgt_tier: int = tgt["tier"]
+		to_tier = tgt_tier
+		var seg_start: Vector2 = EntityPlacement.visual_position(_active_cell, _active_tier)
+		var seg_end: Vector2 = EntityPlacement.visual_position(tgt_cell, tgt_tier)
+		var seg_len: float = seg_start.distance_to(seg_end)
+		if seg_len > 0.0:
+			tier_progress = clampf(seg_start.distance_to(pos) / seg_len, 0.0, 1.0)
+
 	return {
 		"pos": pos,
 		"cell": _active_cell,
 		"tier": _active_tier,
 		"done": _done,
+		"from_tier": from_tier,
+		"to_tier": to_tier,
+		"tier_progress": tier_progress,
 	}

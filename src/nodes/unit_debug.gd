@@ -111,6 +111,20 @@ var _group_positions: PackedVector2Array = PackedVector2Array()
 ## used to lift/unlift positions in `_process`.
 var _group_tier: int = 0
 
+## --- 1-wide chokepoint queueing (#79) -----------------------------------------
+## An optional CHOKE cell (a ramp / 1-wide corridor). When set (!= NO_CELL) the group
+## driver funnels units through it SINGLE-FILE via RampQueue: at most one unit occupies
+## the choke at a time; others HOLD upstream (their follower is not advanced this frame)
+## until it frees, so a crowd queues instead of stacking on the one cell. Left NO_CELL
+## by default so ordinary group flow (open terrain) is completely unaffected; the
+## harness / injector sets it via `set_choke`. Only units within HOLD_RANGE (Chebyshev
+## cells) of the choke are gated — units still far away flow normally.
+var _choke_cell: Vector2i = NO_CELL
+
+## How near (Chebyshev cell distance) the choke a unit must be before the queue gates
+## it. Beyond this it flows freely; within it, a non-admitted unit holds.
+const CHOKE_HOLD_RANGE := 3
+
 
 func _ready() -> void:
 	# Defer binding by one step so the parent MapSystem's @onready layers are populated
@@ -387,16 +401,28 @@ func _process(delta: float) -> void:
 	# CoW snapshot: the first write to _group_positions below duplicates the buffer, so
 	# `snapshot` stays frozen at this frame's pre-move positions for every neighbour set.
 	var snapshot: PackedVector2Array = _group_positions
+	# 1-wide chokepoint queueing (#79): which group indices must HOLD this frame so the
+	# choke stays single-file. Empty when no choke is set (ordinary open-terrain flow).
+	var holds: Dictionary = _choke_holds(snapshot)
 	var all_done: bool = true
 	for i in range(_group_followers.size()):
-		var follower: FlowFollower = _group_followers[i]
-		var out: Dictionary = follower.advance(snapshot[i], _others(snapshot, i), delta)
-		var new_pos: Vector2 = out["pos"]
-		_group_positions[i] = new_pos
 		# Duck-typed unit node: keep it UNTYPED (see _units doc). drive_to (not a raw
 		# position poke) keeps the unit's UnitState live, so click-select / re-order /
 		# re-path after this group move read the real cell, not the stale spawn cell.
 		var unit = _group_units[i]
+		if holds.has(i):
+			# HELD upstream behind the choke: skip its follower this frame so it waits
+			# its turn instead of stacking onto the choke cell. It stays put (position
+			# unchanged) but its state is kept live, and it is NOT done (still queuing),
+			# so the order does not retire while units are still waiting.
+			var hcell: Vector2i = unit.current_cell()
+			unit.drive_to(snapshot[i], hcell, _group_tier)
+			all_done = false
+			continue
+		var follower: FlowFollower = _group_followers[i]
+		var out: Dictionary = follower.advance(snapshot[i], _others(snapshot, i), delta)
+		var new_pos: Vector2 = out["pos"]
+		_group_positions[i] = new_pos
 		var rcell: Vector2i = out["cell"]
 		var rtier: int = out["tier"]
 		unit.drive_to(new_pos, rcell, rtier)
@@ -405,6 +431,38 @@ func _process(delta: float) -> void:
 			all_done = false
 	if all_done:
 		_clear_group_order()
+
+
+## Computes which group indices must HOLD this frame to keep the choke single-file (#79).
+## Returns { index -> true } for every non-admitted contender within CHOKE_HOLD_RANGE
+## of `_choke_cell`; empty when no choke is set or fewer than two units contend (nothing
+## to queue). Contenders are keyed by group INDEX (a stable per-frame id) with priority =
+## distance to the choke's world position (nearer == front), and the ordering/admission
+## decision is the pure RampQueue core, so at most one unit is ever cleared onto the choke.
+func _choke_holds(snapshot: PackedVector2Array) -> Dictionary:
+	var holds: Dictionary = {}
+	if _choke_cell == NO_CELL:
+		return holds
+	var choke_world: Vector2 = EntityPlacement.visual_position(_choke_cell, _group_tier)
+	var contenders: Array = []
+	for i in range(_group_units.size()):
+		# Duck-typed unit node: keep it UNTYPED (see _units doc).
+		var unit = _group_units[i]
+		var ucell: Vector2i = unit.current_cell()
+		var dx: int = absi(ucell.x - _choke_cell.x)
+		var dy: int = absi(ucell.y - _choke_cell.y)
+		if maxi(dx, dy) > CHOKE_HOLD_RANGE:
+			continue
+		var prio: float = snapshot[i].distance_to(choke_world)
+		contenders.append({ "id": i, "cell": ucell, "priority": prio })
+	if contenders.size() <= 1:
+		return holds
+	var res: Dictionary = RampQueue.resolve(contenders, _choke_cell)
+	for it: Dictionary in contenders:
+		var id: int = it["id"]
+		if not RampQueue.may_enter(res, id):
+			holds[id] = true
+	return holds
 
 
 ## The positions of every unit EXCEPT `self_index` — the separation neighbour set for
@@ -440,6 +498,14 @@ func _refresh_highlights() -> void:
 ## replacement for — the derived ramps.
 func set_ramps(ramps: Array) -> void:
 	_ramps = ramps
+
+
+## Sets (or clears, with NO_CELL) the 1-wide CHOKE cell the group driver funnels units
+## through single-file (#79). While a choke is set, `_process` gates units near it via
+## RampQueue so at most one occupies it at a time; NO_CELL disables the queue entirely
+## (ordinary open-terrain group flow). Harness / debug hook.
+func set_choke(cell: Vector2i) -> void:
+	_choke_cell = cell
 
 
 ## Frees every spawned unit and resets the registry and selection. Leaves `_next_id`

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://crusaderamppolish01"]
+
+[ext_resource type="Script" path="res://src/nodes/ramp_polish_harness.gd" id="1_ramppol"]
+
+[node name="RampPolishHarness" type="Node2D"]
+script = ExtResource("1_ramppol")
