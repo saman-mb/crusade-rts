@@ -12,8 +12,11 @@ extends CanvasModulate
 ## the engine clock and the dev scrub input. It is NOT `@tool`, so it does
 ## nothing during a headless `--import` in CI.
 ##
-## Dev scrub: hold `]` (dev_time_fwd) / `[` (dev_time_back) to sweep time of day
-## fast for a live preview of the ramp; releasing resumes the normal cycle.
+## Dev scrub: hold `.` (dev_time_fwd) / `,` (dev_time_back) to sweep time of day
+## fast for a live preview of the ramp; releasing resumes the normal cycle. These keys
+## moved off `[` / `]` (#100) because those also cycle the editor's elevation tier, and
+## this node polls the actions every frame via Input.is_action_pressed(), ignoring event
+## consumption -- so both fired on one bracket press.
 
 ## Seconds for one full midnight->midnight cycle. Feeds DayNight.cycle_seconds.
 @export var cycle_seconds: float = DayNight.DEFAULT_CYCLE_SECONDS

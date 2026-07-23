@@ -44,8 +44,9 @@ func label() -> String:
 
 ## Pure key -> Tool mapping. Returns a Tool value or -1 if unmapped.
 ## Mapping: B -> PAINT (brush), I -> EYEDROPPER, G -> BUCKET (fill).
-## Chosen to AVOID existing editor bindings: W/A/S/D (camera), [ / ] (KEY_BRACKETLEFT/RIGHT),
-## and 1/2/3 (layer switch) all return -1 here.
+## Chosen to AVOID existing editor bindings: W/A/S/D (camera), [ / ] (KEY_BRACKETLEFT/RIGHT,
+## elevation-tier cycle), 1/2/3 (layer switch), and , / . (the dev day/night scrub, moved
+## onto those keys in #100) all return -1 here.
 static func from_keycode(keycode: int) -> int:
 	match keycode:
 		KEY_B:

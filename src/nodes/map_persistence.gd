@@ -84,9 +84,17 @@ func _unhandled_input(event: InputEvent) -> void:
 func _reload() -> void:
 	if _map_system == null:
 		return
+	# Re-read the layer-0 TileSet FRESH each reload (#102) rather than trusting the value
+	# cached in _setup(): the DevMenu can swap the live TileSet after boot (a stale cache
+	# would validate against the wrong set), and it may still have been null when _setup()
+	# ran (a null cache would kill reload for the whole session). Reading here fixes both,
+	# plus the node-ordering dependency, in one place.
+	var l0 := _map_system.get_elevation_layer(0) as TileMapLayer
+	if l0 != null:
+		_tile_set = l0.tile_set
 	# Without a bound TileSet the validator would drop every cell AFTER the loader
 	# has already cleared the layers -- a reload in that window would blank the map.
-	# Skip until the editor has built and shared the TileSet.
+	# Skip only when the TileSet is GENUINELY still unbound at reload time (honest warning).
 	if _tile_set == null:
 		push_warning("reload: TileSet not bound yet; skipping to avoid clearing the map.")
 		return
