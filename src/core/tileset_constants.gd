@@ -4,7 +4,8 @@ extends RefCounted
 ## tileset builder, the dual-grid autotiler, and the water animation driver.
 ## REGION_SIZE mirrors MapConstants.TILE_SIZE -- the single source of truth for
 ## tile geometry itself stays MapConstants; this module only describes how the
-## placeholder atlas at assets/tilesets/terrain_atlas.png is carved into regions.
+## real CC0 terrain atlas at assets/tilesets/terrain_atlas.png (see CREDITS.md) is
+## carved into regions.
 
 const REGION_SIZE := Vector2i(128, 64)          ## == MapConstants.TILE_SIZE; HD 2:1 diamond
 const ATLAS_PX := Vector2i(512, 384)            ## 4 cols x 6 rows of 128x64 regions (row 5 = ramp tile)
