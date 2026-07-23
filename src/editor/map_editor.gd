@@ -55,6 +55,9 @@ var _source_id: int = -1
 ## sourced from the single-source-of-truth LOOKUP table (== Vector2i(3, 3)) rather
 ## than duplicating the literal here.
 var _atlas_coords: Vector2i = TileSetConstants.LOOKUP[FILLED_TILE_MASK]
+## Alternative-tile index the brush paints (#109). 0 is the base tile; the eyedropper
+## samples this off a cell, and it round-trips through StrokeRecorder so undo restores it.
+var _alt: int = 0
 ## Translucent ghost layer that previews the cell under the cursor.
 @onready var _preview: TileMapLayer = $Preview
 ## Cell currently holding the preview tile.
@@ -135,6 +138,19 @@ func rebind_tileset(ts: TileSet) -> void:
 	if _preview != null:
 		_preview.tile_set = ts
 	_source_id = ts.get_source_id(0)
+	# The new TileSet may not have a tile at the current brush atlas coord (e.g. swapping
+	# to the DevMenu "Debug (grid)" set, which has a single tile at (0,0), while the brush
+	# still points at (3,3)) -- painting that would write invalid cells (#101). Validate the
+	# brush against the new source and, if it is now missing, reset to that source's first tile.
+	if _source_id != -1:
+		var src: TileSetAtlasSource = ts.get_source(_source_id) as TileSetAtlasSource
+		if src != null and not src.has_tile(_atlas_coords):
+			if src.get_tiles_count() > 0:
+				var first: Vector2i = src.get_tile_id(0)
+				_atlas_coords = first
+				_alt = 0
+	# Re-project the hover ghost so it reflects the (possibly reset) brush + new tileset.
+	_update_preview()
 
 
 ## Selects the active elevation tier (clamped to the available layers), rebinds
@@ -262,17 +278,20 @@ func _apply_at_mouse(mode: BrushCore.Mode) -> void:
 	var cell := IsoCoord.pick_cell_global(_active_layer, get_global_mouse_position())
 	var cur_src := _active_layer.get_cell_source_id(cell)
 	var cur_atlas := _active_layer.get_cell_atlas_coords(cell)
+	# Capture the cell's alternative_tile too (#109): it round-trips on disk, so undo must
+	# restore it. get_cell_alternative_tile returns int -- annotate to stay warnings-clean.
+	var cur_alt: int = _active_layer.get_cell_alternative_tile(cell)
 	var r := BrushCore.resolve(mode, cur_src, cur_atlas, _source_id, _atlas_coords)
 	# When a stroke is active, record before/after per changed cell so the whole drag
 	# commits as ONE undo action. StrokeRecorder drops net no-ops, so NONE is skipped.
 	match r["action"]:
 		BrushCore.Action.WRITE:
 			if _stroke != null:
-				_stroke.record(cell, cur_src, cur_atlas, r["source_id"], r["atlas_coords"])
-			_active_layer.set_cell(cell, r["source_id"], r["atlas_coords"])
+				_stroke.record(cell, cur_src, cur_atlas, cur_alt, r["source_id"], r["atlas_coords"], _alt)
+			_active_layer.set_cell(cell, r["source_id"], r["atlas_coords"], _alt)
 		BrushCore.Action.CLEAR:
 			if _stroke != null:
-				_stroke.record(cell, cur_src, cur_atlas, -1, Vector2i(-1, -1))
+				_stroke.record(cell, cur_src, cur_atlas, cur_alt, -1, Vector2i(-1, -1), 0)
 			_active_layer.erase_cell(cell)
 		BrushCore.Action.NONE:
 			pass
@@ -313,9 +332,12 @@ func _eyedrop_at_mouse() -> void:
 	var cell := IsoCoord.pick_cell_global(_active_layer, get_global_mouse_position())
 	var s := _active_layer.get_cell_source_id(cell)
 	var a := _active_layer.get_cell_atlas_coords(cell)
+	# Sample the alternative_tile too (#109) so painting re-lays the exact tile variant.
+	var alt: int = _active_layer.get_cell_alternative_tile(cell)
 	if s != -1:
 		_source_id = s
 		_atlas_coords = a
+		_alt = alt
 		_update_preview()
 
 
@@ -340,8 +362,11 @@ func _bucket_fill_at_mouse() -> void:
 	# (e.g. filling onto the identical brush tile), so this commits nothing when it's a no-op.
 	var stroke := StrokeRecorder.new()
 	for cell in cells:
-		stroke.record(cell, match_src, match_atlas, _source_id, _atlas_coords)
-		_active_layer.set_cell(cell, _source_id, _atlas_coords)
+		# Cells share the seed's src+atlas identity (FloodFill matches on those), but their
+		# alternative_tile can differ, so read each cell's alt for a faithful undo (#109).
+		var before_alt: int = _active_layer.get_cell_alternative_tile(cell)
+		stroke.record(cell, match_src, match_atlas, before_alt, _source_id, _atlas_coords, _alt)
+		_active_layer.set_cell(cell, _source_id, _atlas_coords, _alt)
 	if not stroke.is_empty():
 		var changes := stroke.changes()
 		stroke.commit(_undo, "Bucket Fill", Callable(_active_layer, "set_cell"))
@@ -363,6 +388,6 @@ func _update_preview() -> void:
 		return
 	if _has_preview:
 		_preview.erase_cell(_preview_cell)
-	_preview.set_cell(cell, _source_id, _atlas_coords)
+	_preview.set_cell(cell, _source_id, _atlas_coords, _alt)
 	_preview_cell = cell
 	_has_preview = true
