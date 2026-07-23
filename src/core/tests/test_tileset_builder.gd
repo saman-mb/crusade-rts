@@ -21,6 +21,10 @@ func _run() -> void:
 		_test_water_animation(src)
 	_test_animation_bounds_independent()
 	_test_committed_asset()
+	_test_make_atlas_texture(tex)
+	_test_no_normal_is_plain_texture(tex)
+	_test_normal_map_wired_into_source(tex)
+	_test_committed_normal_asset()
 
 
 # --- helpers ---
@@ -122,9 +126,60 @@ func _test_animation_bounds_independent() -> void:
 ## disk and matches the contracted pixel dimensions. A null load is a FAIL, not
 ## a crash.
 func _test_committed_asset() -> void:
-	var disk := load("res://assets/tilesets/terrain_atlas.png")
-	_ok(disk != null, "committed atlas res://assets/tilesets/terrain_atlas.png failed to load")
+	var disk := load(TileSetConstants.ATLAS_PATH)
+	_ok(disk != null, "committed atlas %s failed to load" % TileSetConstants.ATLAS_PATH)
 	if disk != null:
 		var size := Vector2i(disk.get_size())
 		_ok(_v_match(size, TileSetConstants.ATLAS_PX),
 			"committed atlas size %s != %s" % [size, TileSetConstants.ATLAS_PX])
+
+## make_atlas_texture: null normal returns the diffuse untouched (unlit path);
+## a normal returns a CanvasTexture pairing the two (#84).
+func _test_make_atlas_texture(diffuse: Texture2D) -> void:
+	var plain := TileSetBuilder.make_atlas_texture(diffuse, null)
+	_ok(plain == diffuse, "make_atlas_texture(diffuse, null) should return the diffuse itself")
+	var normal := ImageTexture.create_from_image(
+		Image.create(TileSetConstants.ATLAS_PX.x, TileSetConstants.ATLAS_PX.y, false, Image.FORMAT_RGB8))
+	var paired := TileSetBuilder.make_atlas_texture(diffuse, normal)
+	var ct := paired as CanvasTexture
+	_ok(ct != null, "make_atlas_texture(diffuse, normal) should return a CanvasTexture")
+	if ct != null:
+		_ok(ct.diffuse_texture == diffuse, "CanvasTexture.diffuse_texture not the diffuse")
+		_ok(ct.normal_texture == normal, "CanvasTexture.normal_texture not the normal")
+
+## Building without a normal leaves the source drawing the plain diffuse (not a
+## CanvasTexture), so the existing single-arg callers are unchanged.
+func _test_no_normal_is_plain_texture(diffuse: Texture2D) -> void:
+	var ts := TileSetBuilder.build_terrain_tileset(diffuse)
+	var src := ts.get_source(ts.get_source_id(0)) as TileSetAtlasSource
+	_ok(src != null and src.texture == diffuse, "no-normal build should keep the plain diffuse texture")
+	_ok(not (src.texture is CanvasTexture), "no-normal build should NOT wrap in a CanvasTexture")
+
+## Building WITH a normal wires a CanvasTexture (diffuse + normal) onto the atlas
+## source, so Light2D can shade the tiles with relief.
+func _test_normal_map_wired_into_source(diffuse: Texture2D) -> void:
+	var normal := ImageTexture.create_from_image(
+		Image.create(TileSetConstants.ATLAS_PX.x, TileSetConstants.ATLAS_PX.y, false, Image.FORMAT_RGB8))
+	var ts := TileSetBuilder.build_terrain_tileset(diffuse, normal)
+	var src := ts.get_source(ts.get_source_id(0)) as TileSetAtlasSource
+	_ok(src != null, "normal build produced no atlas source")
+	if src == null:
+		return
+	var ct := src.texture as CanvasTexture
+	_ok(ct != null, "atlas source texture is not a CanvasTexture when a normal is supplied")
+	if ct != null:
+		_ok(ct.diffuse_texture == diffuse, "source CanvasTexture diffuse is not the atlas diffuse")
+		_ok(ct.normal_texture == normal, "source CanvasTexture normal is not the supplied normal map")
+	# Region size is unchanged: the CanvasTexture is a transparent swap for the diffuse.
+	_ok(_v_match(src.texture_region_size, TileSetConstants.REGION_SIZE),
+		"region size changed when wrapping in a CanvasTexture")
+
+## Committed normal-atlas check (post-import): the L1 normal PNG exists on disk
+## and matches the atlas dimensions, so build_default_terrain_tileset pairs it in.
+func _test_committed_normal_asset() -> void:
+	var disk := load(TileSetConstants.NORMAL_ATLAS_PATH)
+	_ok(disk != null, "committed normal atlas %s failed to load" % TileSetConstants.NORMAL_ATLAS_PATH)
+	if disk != null:
+		var size := Vector2i(disk.get_size())
+		_ok(_v_match(size, TileSetConstants.ATLAS_PX),
+			"committed normal atlas size %s != %s" % [size, TileSetConstants.ATLAS_PX])

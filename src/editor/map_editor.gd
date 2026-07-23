@@ -98,14 +98,18 @@ func _setup() -> void:
 		push_warning("map_editor: map_system_path unresolved; editor is inert.")
 		return
 
-	var tex := (terrain_atlas if terrain_atlas != null else load("res://assets/tilesets/terrain_atlas.png")) as Texture2D
+	var tex := (terrain_atlas if terrain_atlas != null else load(TileSetConstants.ATLAS_PATH)) as Texture2D
 	if tex == null:
 		push_warning("map_editor: terrain_atlas.png not found; editor is inert.")
 		return
 
+	# Pair the diffuse atlas with the L1 normal map so the terrain catches
+	# directional light from the sun (#84). A missing normal degrades to unlit.
+	var normal := load(TileSetConstants.NORMAL_ATLAS_PATH) as Texture2D
+
 	# Build the TileSet once and share it across every elevation layer that lacks
 	# one plus the preview layer, so all paint/ghost cells resolve identically.
-	var ts := TileSetBuilder.build_terrain_tileset(tex)
+	var ts := TileSetBuilder.build_terrain_tileset(tex, normal)
 	for i in _layer_count():
 		var layer := _map_system.get_elevation_layer(i) as TileMapLayer
 		if layer != null and layer.tile_set == null:

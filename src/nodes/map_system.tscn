@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://crusademapsys01"]
+[gd_scene load_steps=8 format=3 uid="uid://crusademapsys01"]
 
 [ext_resource type="Script" path="res://src/nodes/map_system.gd" id="1_mapsys"]
 [ext_resource type="PackedScene" uid="uid://crusadertscam01" path="res://src/nodes/rts_camera.tscn" id="2_rtscam"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://src/nodes/map_persistence.gd" id="4_mappersist"]
 [ext_resource type="PackedScene" uid="uid://crusadedevmenu01" path="res://src/ui/dev_menu.tscn" id="5_devmenu"]
 [ext_resource type="Script" path="res://src/nodes/day_night_driver.gd" id="6_daynight"]
+[ext_resource type="Script" path="res://src/nodes/sun_light.gd" id="7_sun"]
 
 [node name="MapSystem" type="Node2D"]
 y_sort_enabled = true
@@ -13,6 +14,9 @@ script = ExtResource("1_mapsys")
 
 [node name="DayNight" type="CanvasModulate" parent="."]
 script = ExtResource("6_daynight")
+
+[node name="Sun" type="DirectionalLight2D" parent="."]
+script = ExtResource("7_sun")
 
 [node name="Elevation0" type="TileMapLayer" parent="."]
 y_sort_enabled = true

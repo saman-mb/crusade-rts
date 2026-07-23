@@ -92,7 +92,7 @@ func _setup() -> void:
 ## More entries arrive with the real art (#33).
 func _register_tilesets() -> void:
 	_catalog.register("Terrain (HD)", func() -> TileSet:
-		return TileSetBuilder.build_terrain_tileset(load("res://assets/tilesets/terrain_atlas.png")))
+		return TileSetBuilder.build_default_terrain_tileset())
 	_catalog.register("Debug (grid)", _build_debug_tileset)
 
 

@@ -13,14 +13,30 @@ static func configure_isometric(ts: TileSet) -> void:
 	ts.tile_layout = TileSet.TILE_LAYOUT_DIAMOND_DOWN
 	ts.tile_size = MapConstants.TILE_SIZE
 
+## Pairs a diffuse atlas with an optional normal map into the texture the atlas
+## source draws with. When `normal` is supplied, returns a CanvasTexture that
+## carries both, so a Light2D shades each diamond with the normal-map relief (L3,
+## #84); when it is null, returns the diffuse texture unchanged (unlit path, and
+## keeps every existing single-arg caller behaving exactly as before). Pure and
+## headless -- CanvasTexture is a CPU-side Resource, no GPU needed.
+static func make_atlas_texture(diffuse: Texture2D, normal: Texture2D = null) -> Texture2D:
+	if normal == null:
+		return diffuse
+	var ct := CanvasTexture.new()
+	ct.diffuse_texture = diffuse
+	ct.normal_texture = normal
+	return ct
+
 ## Builds the full terrain TileSet from an atlas texture: one atlas source, a
 ## tile at each distinct non-sentinel LOOKUP coord, and the animated water tile.
-static func build_terrain_tileset(texture: Texture2D) -> TileSet:
+## An optional `normal` map is paired with the diffuse via a CanvasTexture so the
+## terrain catches directional light (#84).
+static func build_terrain_tileset(texture: Texture2D, normal: Texture2D = null) -> TileSet:
 	var ts := TileSet.new()
 	configure_isometric(ts)
 
 	var src := TileSetAtlasSource.new()
-	src.texture = texture
+	src.texture = make_atlas_texture(texture, normal)
 	src.texture_region_size = TileSetConstants.REGION_SIZE
 	ts.add_source(src)
 
@@ -45,6 +61,19 @@ static func build_terrain_tileset(texture: Texture2D) -> TileSet:
 	configure_water_animation(src, water)
 
 	return ts
+
+## Loads the committed diffuse + normal atlases from their canonical paths and
+## builds the terrain TileSet from them. One place so every call site (the editor
+## boot and the dev-menu catalog) gets the normal map wired identically. Returns
+## null if the diffuse atlas is missing; a missing normal degrades to the unlit
+## texture rather than failing.
+static func build_default_terrain_tileset() -> TileSet:
+	var diffuse := load(TileSetConstants.ATLAS_PATH) as Texture2D
+	if diffuse == null:
+		return null
+	var normal := load(TileSetConstants.NORMAL_ATLAS_PATH) as Texture2D
+	return build_terrain_tileset(diffuse, normal)
+
 
 ## Configures the multi-frame water animation on an existing atlas tile: frame
 ## count, column layout, per-frame durations, separation, and randomized start
