@@ -87,6 +87,25 @@ func set_selected(p_selected: bool) -> void:
 	_ring.visible = p_selected
 
 
+## Drives this unit from an EXTERNAL follower (the group-flow controller in
+## unit_debug drives many units off one shared step, rather than each unit's own
+## PathFollower). Syncs UnitState + the node transform exactly as the self-driven
+## _process does, so current_cell()/current_tier() stay LIVE after a controller-driven
+## move — otherwise a later click-select (Selection.unit_at reads current_cell), group
+## re-order (Formation seeds off current_cell), or single-unit A* re-path would all use
+## the stale pre-move cell. `world_pos` is lifted space (EntityPlacement.visual_position),
+## matching FlowFollower.advance's returned pos/cell/tier.
+func drive_to(world_pos: Vector2, cell: Vector2i, tier: int) -> void:
+	_state.world_pos = world_pos
+	if tier != _state.tier:
+		var sprite: Sprite2D = $Sprite2D
+		sprite.position = EntityPlacement.visual_offset(tier)
+		_reparent_to_tier.call_deferred(tier)
+	_state.tier = tier
+	_state.cell = cell
+	position = _state.ground_position()
+
+
 func _process(delta: float) -> void:
 	if not _follower.has_path():
 		return
