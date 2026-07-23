@@ -5,7 +5,8 @@ extends GdTest
 ## reports JSON/root errors without crashing, that load_into_layers clears every
 ## target layer first (no stale cells), migrates a legacy v0 doc up before painting,
 ## drops validate-rejected cells, casts JSON floats through int() with an alt default
-## of 0, keeps layers isolated by elevation, and skips out-of-range elevations.
+## of 0, keeps layers isolated by elevation, and FAILS the load on an out-of-range
+## elevation (#106 -- a tier the build lacks is a hard failure, not a silent drop).
 ##
 ## Godot 4.4 signatures (NO leading layer arg -- 4.4 dropped it):
 ##   set_cell(coords, source_id := -1, atlas_coords := Vector2i(-1,-1), alternative := 0)
@@ -199,9 +200,13 @@ func _test_multi_layer(layers: Array[TileMapLayer], layer0: TileMapLayer, layer1
 	_i_eq(layer1.get_cell_source_id(Vector2i(3, 3)), sid, "elevation 1 cell in layer1")
 	_i_eq(layer1.get_cell_source_id(Vector2i(1, 1)), -1, "no cross-bleed: layer1 lacks (1,1)")
 
-## An out-of-range elevation is skipped with a diagnostic and no crash.
+## An out-of-range elevation is a HARD load FAILURE (#106): a map referencing a tier
+## this build lacks aborts with ok=false and a diagnostic, rather than silently
+## dropping the layer with ok=true. This assertion was deliberately FLIPPED from the
+## pre-#106 ok==true behavior -- the tier count (MapConstants.TIER_COUNT) is now
+## authoritative, so a mismatch means the file is incompatible, not merely partial.
 func _test_elevation_out_of_range(layers: Array[TileMapLayer], sid: int, ts: TileSet) -> void:
 	var text := _doc_json([_layer(99, [_cell(1, 1, sid, 0, 0)])])
 	var res := MapLoader.load_into_layers(text, layers, ts)
-	_ok(res["ok"] == true, "out-of-range elevation load -> ok true (no crash)")
+	_ok(res["ok"] == false, "out-of-range elevation load -> ok false (#106 hard failure)")
 	_ok((res["diagnostics"] as Array).size() >= 1, "out-of-range elevation produced a diagnostic")

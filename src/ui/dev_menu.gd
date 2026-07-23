@@ -26,15 +26,12 @@ const P_ORPHAN := "Sidebar/SidebarMargin/SidebarVBox/OrphanReadout"
 var _mode := ModeController.new()
 ## Named-tileset registry + swap logic used by the sidebar switcher.
 var _catalog := TilesetCatalog.new()
-## The resolved MapSystem node. Left UNTYPED on purpose so its
-## `get_node_or_null()` / `elevation_layers` API is duck-typed: MapSystem
-## carries no `class_name`, and a static `Node` type would make the 4.4 analyzer
-## reject those calls ("not found in base Node") and fail the whole script load.
-var _map_system
-## The resolved MapEditor child of the MapSystem. UNTYPED for the same reason:
-## MapEditor has no `class_name`, so `editing_enabled`/`rebind_tileset()` are
-## duck-typed off this reference.
-var _map_editor
+## The resolved MapSystem node. Typed via class_name (#105): its
+## `get_node_or_null()` / `elevation_layers` API resolves on the MapSystem type.
+var _map_system: MapSystem
+## The resolved MapEditor child of the MapSystem. Typed via class_name (#105):
+## `editing_enabled` / `rebind_tileset()` resolve on the MapEditor type.
+var _map_editor: MapEditor
 ## Catalog entry names, index-aligned with the TilesetList rows.
 var _tileset_names: Array[String] = []
 
@@ -52,11 +49,11 @@ func _ready() -> void:
 
 
 func _setup() -> void:
-	_map_system = get_node_or_null(map_system_path)
+	_map_system = get_node_or_null(map_system_path) as MapSystem
 	if _map_system == null:
 		push_warning("dev_menu: map_system_path unresolved; overlay is inert.")
 		return
-	_map_editor = _map_system.get_node_or_null("MapEditor")
+	_map_editor = _map_system.get_node_or_null("MapEditor") as MapEditor
 
 	# Assign the theme in code (not the .tscn) to avoid a fragile theme resource.
 	var root := $Root as Control
@@ -187,6 +184,9 @@ func _on_tileset_activated(index: int) -> void:
 	var res := TilesetCatalog.swap_into(layers, ts)
 	if _map_editor != null:
 		_map_editor.rebind_tileset(ts)
+	# A tileset swap re-tiles (and can orphan cells across) the whole stack, so
+	# announce a whole-map change through the MapSystem hub (#95).
+	_map_system.emit_map_changed_all()
 
 	var orphaned: int = res["orphaned"]
 	var readout := $Root.get_node(P_ORPHAN) as Label

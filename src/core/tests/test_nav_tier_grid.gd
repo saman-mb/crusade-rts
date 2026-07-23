@@ -12,6 +12,10 @@ func _run() -> void:
 	_test_path_around_partial_obstacle()
 	_test_solid_endpoint_returns_empty()
 	_test_update_post_construction()
+	_test_components_partition_walkable()
+	_test_component_of_and_walkable_contract()
+	_test_walkable_cells_iteration()
+	_test_reachable_matches_astar_ground_truth()
 
 
 # --- helpers ---
@@ -90,3 +94,110 @@ func _test_update_post_construction() -> void:
 	var path: Array[Vector2i] = grid.path_within(Vector2i(0, 0), Vector2i(0, 1))
 	_ok(not path.is_empty(), "post-update: adjacent open pair paths without manual update()")
 	_i_eq(path.size(), 2, "post-update: adjacent path is exactly 2 cells")
+
+## 8 (#104): component labels partition walkable cells. A full wall at x=5 splits
+## the region into two walkable halves -> exactly 2 components; every cell in the
+## left half shares one label, every cell in the right half shares another, and
+## the two labels differ.
+func _test_components_partition_walkable() -> void:
+	var blocked: Dictionary = {}
+	for y in range(0, 10):
+		blocked[Vector2i(5, y)] = true
+	var grid := NavTierGrid.new(Rect2i(0, 0, 10, 10), _rule(blocked))
+	_i_eq(grid.component_count(), 2, "wall-split: exactly two walkable components")
+
+	var left_label: int = grid.component_of(Vector2i(0, 0))
+	var right_label: int = grid.component_of(Vector2i(9, 0))
+	_ok(left_label != NavTierGrid.NO_COMPONENT, "wall-split: left half has a real label")
+	_ok(right_label != NavTierGrid.NO_COMPONENT, "wall-split: right half has a real label")
+	_ok(left_label != right_label, "wall-split: the two halves have DIFFERENT labels")
+
+	# Every walkable left cell shares left_label; every walkable right cell shares right_label.
+	var left_uniform: bool = true
+	var right_uniform: bool = true
+	for y in range(0, 10):
+		for x in range(0, 5):
+			if grid.component_of(Vector2i(x, y)) != left_label:
+				left_uniform = false
+		for x in range(6, 10):
+			if grid.component_of(Vector2i(x, y)) != right_label:
+				right_uniform = false
+	_ok(left_uniform, "wall-split: whole left half shares one label")
+	_ok(right_uniform, "wall-split: whole right half shares one label")
+
+	# A fully-open region is a single component.
+	var open_grid := NavTierGrid.new(Rect2i(0, 0, 8, 8), _rule({}))
+	_i_eq(open_grid.component_count(), 1, "open region: exactly one component")
+	_ok(open_grid.component_of(Vector2i(0, 0)) == open_grid.component_of(Vector2i(7, 7)),
+		"open region: distant cells share the single label")
+
+## 9 (#104): component_of / is_walkable contract for solid & off-region cells.
+func _test_component_of_and_walkable_contract() -> void:
+	var blocked: Dictionary = { Vector2i(3, 3): true }
+	var grid := NavTierGrid.new(Rect2i(0, 0, 10, 10), _rule(blocked))
+	# Solid cell -> NO_COMPONENT and not walkable.
+	_ok(grid.component_of(Vector2i(3, 3)) == NavTierGrid.NO_COMPONENT, "solid cell -> NO_COMPONENT")
+	_ok(not grid.is_walkable(Vector2i(3, 3)), "solid cell -> not walkable")
+	# Off-region cells -> NO_COMPONENT (no out-of-bounds index).
+	_ok(grid.component_of(Vector2i(-1, 0)) == NavTierGrid.NO_COMPONENT, "off-region (neg) -> NO_COMPONENT")
+	_ok(grid.component_of(Vector2i(10, 10)) == NavTierGrid.NO_COMPONENT, "off-region (past) -> NO_COMPONENT")
+	# A walkable cell has a valid (non-sentinel) label.
+	_ok(grid.component_of(Vector2i(0, 0)) != NavTierGrid.NO_COMPONENT, "walkable cell -> real label")
+
+## 10 (#104): walkable_cells() returns exactly the region's walkable cells and
+## every one of them has a real component label (region-bounds iteration contract).
+func _test_walkable_cells_iteration() -> void:
+	var blocked: Dictionary = { Vector2i(2, 2): true, Vector2i(3, 3): true }
+	var region := Rect2i(0, 0, 6, 6)
+	var grid := NavTierGrid.new(region, _rule(blocked))
+	var cells: Array[Vector2i] = grid.walkable_cells()
+	# 36 cells minus 2 holes.
+	_i_eq(cells.size(), 34, "walkable_cells: count is region area minus holes")
+	var all_walkable_labelled: bool = true
+	for c: Vector2i in cells:
+		if not grid.is_walkable(c):
+			all_walkable_labelled = false
+		if grid.component_of(c) == NavTierGrid.NO_COMPONENT:
+			all_walkable_labelled = false
+	_ok(all_walkable_labelled, "walkable_cells: every listed cell is walkable with a real label")
+	_ok(not cells.has(Vector2i(2, 2)) and not cells.has(Vector2i(3, 3)),
+		"walkable_cells: excludes the holes")
+
+## 11 (#104): the O(1) reachable() agrees with the A* ground truth
+## (not path_within(a,b).is_empty()) across MANY pairs on a maze-like grid --
+## connected, wall-split, non-walkable-endpoint and off-region cases all covered.
+func _test_reachable_matches_astar_ground_truth() -> void:
+	# A grid with a full internal wall at x=4 pierced by a single gap at y=7, plus
+	# a lone hole -- yields both connected and (endpoint-)invalid pairs to compare.
+	var blocked: Dictionary = {}
+	for y in range(0, 10):
+		if y != 7:
+			blocked[Vector2i(4, y)] = true
+	blocked[Vector2i(8, 1)] = true  # isolated hole for solid-endpoint cases
+	var region := Rect2i(0, 0, 10, 10)
+	var grid := NavTierGrid.new(region, _rule(blocked))
+
+	# Probe a spread of cells: corners, both sides of the wall, the gap, the hole,
+	# and two off-region cells -- every ordered pair is checked both ways.
+	var probes: Array[Vector2i] = [
+		Vector2i(0, 0), Vector2i(3, 9), Vector2i(4, 7), Vector2i(5, 0),
+		Vector2i(9, 9), Vector2i(8, 1), Vector2i(4, 3), Vector2i(-1, 5),
+		Vector2i(10, 2),
+	]
+	var mismatches: int = 0
+	for a: Vector2i in probes:
+		for b: Vector2i in probes:
+			var fast: bool = grid.reachable(a, b)
+			var truth: bool = not grid.path_within(a, b).is_empty()
+			if fast != truth:
+				mismatches += 1
+	_i_eq(mismatches, 0, "reachable() O(1) agrees with A* ground truth over all probe pairs")
+	# Spot-check the interesting split: same side reachable, across-wall NOT.
+	_ok(grid.reachable(Vector2i(0, 0), Vector2i(3, 9)), "left side internally reachable")
+	_ok(grid.reachable(Vector2i(0, 0), Vector2i(9, 9)), "reachable across the single gap at y=7")
+	# Wall the gap too -> the two sides become genuinely disconnected.
+	blocked[Vector2i(4, 7)] = true
+	var split := NavTierGrid.new(region, _rule(blocked))
+	_ok(not split.reachable(Vector2i(0, 0), Vector2i(9, 9)), "sealed wall: sides NOT reachable")
+	_ok(split.reachable(Vector2i(0, 0), Vector2i(9, 9)) == (not split.path_within(Vector2i(0, 0), Vector2i(9, 9)).is_empty()),
+		"sealed wall: reachable still matches A* ground truth")
