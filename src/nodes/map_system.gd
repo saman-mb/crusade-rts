@@ -13,6 +13,23 @@ extends Node2D
 ## edge tiles and the editor has room to paint outward before the bounds catch up.
 const CAMERA_BOUNDS_PAD_CELLS := 3
 
+## Per-tier brighten added to each elevation layer's modulate (Story L4, #85).
+## Feeds ElevationShade.shade_at; higher tiers catch more light. 0.0 disables the
+## height cue (every tier lit identically, as before L4).
+@export_range(0.0, 0.25, 0.005) var elevation_shade_step: float = ElevationShade.DEFAULT_STEP:
+	set(v):
+		elevation_shade_step = v
+		if is_node_ready():
+			_apply_elevation_shading()
+
+## Warm sun-ward color of the light added to higher tiers (Story L4, #85). Kept
+## consistent with the L3 sun tint so raised ground reads as catching more sun.
+@export var elevation_shade_tint: Color = ElevationShade.DEFAULT_TINT:
+	set(v):
+		elevation_shade_tint = v
+		if is_node_ready():
+			_apply_elevation_shading()
+
 @onready var elevation_layers: Array[TileMapLayer] = [
 	$Elevation0,
 	$Elevation1,
@@ -22,6 +39,7 @@ const CAMERA_BOUNDS_PAD_CELLS := 3
 
 func _ready() -> void:
 	_apply_elevation_offsets()
+	_apply_elevation_shading()
 	# Feed the camera its clamp bounds from the initial content, but only at
 	# runtime: the @tool pass must not mutate the instanced camera in the editor.
 	if not Engine.is_editor_hint():
@@ -38,6 +56,21 @@ func _apply_elevation_offsets() -> void:
 			layer.position = pos
 		if layer.y_sort_origin != origin:
 			layer.y_sort_origin = origin
+
+## Elevation-aware shading (Story L4, #85): tints each tier's layer `modulate`
+## brighter the higher it sits, so a terraced map reads with believable height.
+## Purely a CanvasItem tint — it does NOT touch position/y_sort_origin, so tier
+## sorting (and the no-z-fighting guarantee) is untouched. The modulate
+## MULTIPLIES with the DayNight ambient, so tier contrast persists across the
+## day/night cycle. Level 0 stays neutral, so flat single-tier maps are unchanged.
+func _apply_elevation_shading() -> void:
+	for level in elevation_layers.size():
+		var layer := elevation_layers[level]
+		if layer == null:
+			continue
+		var tint := ElevationShade.shade_at(level, elevation_shade_step, elevation_shade_tint)
+		if layer.modulate != tint:
+			layer.modulate = tint
 
 ## Returns the TileMapLayer for an elevation tier, or null if out of range.
 func get_elevation_layer(level: int) -> TileMapLayer:
