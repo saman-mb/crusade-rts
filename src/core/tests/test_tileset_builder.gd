@@ -20,7 +20,9 @@ func _run() -> void:
 		_test_tiles(src)
 		_test_water_animation(src)
 		_test_walkable_layer(ts, src)
+		_test_ramp_layer(ts, src)
 	_test_walkable_table_independent()
+	_test_ramp_table_independent()
 	_test_animation_bounds_independent()
 	_test_committed_asset()
 	_test_make_atlas_texture(tex)
@@ -99,7 +101,7 @@ func _test_water_animation(src: TileSetAtlasSource) -> void:
 ## Per-tile walkability (#96): the TYPE_BOOL "walkable" custom-data layer exists,
 ## every ground (LOOKUP) tile is walkable, and the water tile is not.
 func _test_walkable_layer(ts: TileSet, src: TileSetAtlasSource) -> void:
-	_ok(ts.get_custom_data_layers_count() == 1, "exactly one custom-data layer registered")
+	_ok(ts.get_custom_data_layers_count() == 2, "exactly two custom-data layers registered (walkable + ramp)")
 	var idx: int = ts.get_custom_data_layer_by_name(TileSetConstants.WALKABLE_LAYER)
 	_ok(idx != -1, "no custom-data layer named %s" % TileSetConstants.WALKABLE_LAYER)
 	if idx == -1:
@@ -125,6 +127,52 @@ func _test_walkable_layer(ts: TileSet, src: TileSetAtlasSource) -> void:
 	if wdata != null:
 		_ok(bool(wdata.get_custom_data(TileSetConstants.WALKABLE_LAYER)) == false,
 			"water tile %s should NOT be walkable" % water)
+
+## Per-tile ramp flag (#78): the TYPE_BOOL "ramp" custom-data layer exists, the
+## ramp tile is present and marked BOTH ramp and walkable (a unit stands on it),
+## while ordinary ground and the water tile are not ramps.
+func _test_ramp_layer(ts: TileSet, src: TileSetAtlasSource) -> void:
+	var idx: int = ts.get_custom_data_layer_by_name(TileSetConstants.RAMP_LAYER)
+	_ok(idx != -1, "no custom-data layer named %s" % TileSetConstants.RAMP_LAYER)
+	if idx == -1:
+		return
+	_ok(ts.get_custom_data_layer_type(idx) == TYPE_BOOL,
+		"ramp layer type %d != TYPE_BOOL" % ts.get_custom_data_layer_type(idx))
+
+	# The ramp tile exists and is flagged as a ramp AND walkable.
+	var ramp := TileSetConstants.RAMP_COORDS[0]
+	var rdata := src.get_tile_data(ramp, 0)
+	_ok(rdata != null, "no ramp tile at %s" % ramp)
+	if rdata != null:
+		_ok(bool(rdata.get_custom_data(TileSetConstants.RAMP_LAYER)) == true,
+			"ramp tile %s should be flagged ramp" % ramp)
+		_ok(bool(rdata.get_custom_data(TileSetConstants.WALKABLE_LAYER)) == true,
+			"ramp tile %s should be walkable" % ramp)
+
+	# An ordinary ground tile is not a ramp.
+	var ground := TileSetConstants.LOOKUP[15]
+	var gdata := src.get_tile_data(ground, 0)
+	_ok(gdata != null, "no ground tile at LOOKUP[15] %s" % ground)
+	if gdata != null:
+		_ok(bool(gdata.get_custom_data(TileSetConstants.RAMP_LAYER)) == false,
+			"ground tile %s should NOT be a ramp" % ground)
+
+	# Water is not a ramp.
+	var water := TileSetConstants.WATER_ANIM_COORDS
+	var wdata := src.get_tile_data(water, 0)
+	_ok(wdata != null, "no water tile at %s" % water)
+	if wdata != null:
+		_ok(bool(wdata.get_custom_data(TileSetConstants.RAMP_LAYER)) == false,
+			"water tile %s should NOT be a ramp" % water)
+
+## INDEPENDENT table guard (#78): ramp membership is decided by TileSetConstants,
+## checked directly here so a builder that silently stopped writing the layer
+## cannot be masked by _test_ramp_layer reading the builder's own output.
+func _test_ramp_table_independent() -> void:
+	_ok(TileSetConstants.coord_ramp(TileSetConstants.RAMP_COORDS[0]) == true,
+		"table says the ramp coord is not a ramp")
+	_ok(TileSetConstants.coord_ramp(TileSetConstants.LOOKUP[15]) == false,
+		"table says a ground LOOKUP coord is a ramp")
 
 ## INDEPENDENT table guard (#96): walkability is decided by TileSetConstants,
 ## checked directly here so a builder that silently stopped writing the layer

@@ -47,6 +47,14 @@ static func build_terrain_tileset(texture: Texture2D, normal: Texture2D = null) 
 	ts.set_custom_data_layer_name(idx, TileSetConstants.WALKABLE_LAYER)
 	ts.set_custom_data_layer_type(idx, TYPE_BOOL)
 
+	# Register a second per-tile "ramp" layer (#78) the same way, before any tile
+	# exists, so every set_custom_data(RAMP_LAYER, ...) below resolves. Marks a
+	# tier-transition tile the NavMapBuilder turns into a NavRamp.
+	ts.add_custom_data_layer()
+	var ramp_idx: int = ts.get_custom_data_layers_count() - 1
+	ts.set_custom_data_layer_name(ramp_idx, TileSetConstants.RAMP_LAYER)
+	ts.set_custom_data_layer_type(ramp_idx, TYPE_BOOL)
+
 	# De-duplicate coords: LOOKUP repeats atlas coords across its 16 entries and
 	# create_tile() must never be called twice for the same coord.
 	var seen: Dictionary = {}
@@ -59,6 +67,7 @@ static func build_terrain_tileset(texture: Texture2D, normal: Texture2D = null) 
 		src.create_tile(coord)
 		src.get_tile_data(coord, 0).texture_origin = TileSetConstants.TEXTURE_ORIGIN
 		src.get_tile_data(coord, 0).set_custom_data(TileSetConstants.WALKABLE_LAYER, TileSetConstants.coord_walkable(coord))
+		src.get_tile_data(coord, 0).set_custom_data(TileSetConstants.RAMP_LAYER, TileSetConstants.coord_ramp(coord))
 
 	# Water lives at its own row (WATER_ANIM_COORDS) so it never collides with a
 	# LOOKUP coord; create it separately and wire up its animation.
@@ -69,7 +78,21 @@ static func build_terrain_tileset(texture: Texture2D, normal: Texture2D = null) 
 	# Water is non-walkable; set it unconditionally so it holds even if the water
 	# coord had already been created as a LOOKUP tile above.
 	src.get_tile_data(water, 0).set_custom_data(TileSetConstants.WALKABLE_LAYER, TileSetConstants.coord_walkable(water))
+	src.get_tile_data(water, 0).set_custom_data(TileSetConstants.RAMP_LAYER, TileSetConstants.coord_ramp(water))
 	configure_water_animation(src, water)
+
+	# Ramp tiles (#78) live on their own row (RAMP_COORDS) so they never collide
+	# with a LOOKUP or water coord; create each separately, mirroring the water
+	# block, and mark it BOTH walkable (a unit stands on it) and a ramp. The
+	# seen-guard is defensive: RAMP_COORDS does not overlap the LOOKUP/water rows
+	# today (row 5), but a future collision must not double-create the tile.
+	for ramp in TileSetConstants.RAMP_COORDS:
+		if not seen.has(ramp):
+			seen[ramp] = true
+			src.create_tile(ramp)
+			src.get_tile_data(ramp, 0).texture_origin = TileSetConstants.TEXTURE_ORIGIN
+		src.get_tile_data(ramp, 0).set_custom_data(TileSetConstants.WALKABLE_LAYER, TileSetConstants.coord_walkable(ramp))
+		src.get_tile_data(ramp, 0).set_custom_data(TileSetConstants.RAMP_LAYER, TileSetConstants.coord_ramp(ramp))
 
 	return ts
 

@@ -58,6 +58,15 @@ func _run() -> void:
 	_test_from_map_system(layer0, layer1, painted0, painted1)
 	_test_walkable_semantics()
 
+	# Ramp derivation from painted ramp tiles (#78 WU-C).
+	_test_ramps_from_layers_valid()
+	_test_ramps_from_layers_none()
+	_test_ramps_from_layers_no_lower_neighbor()
+	_test_ramps_from_layers_multi_neighbor()
+	_test_ramps_from_layers_deterministic()
+	_test_ramp_query_absent_layer()
+	_test_from_map_system_derives()
+
 	layer0.queue_free()
 	layer1.queue_free()
 
@@ -83,6 +92,27 @@ func _build_tileset() -> TileSet:
 	src.create_tile(Vector2i(0, 0))
 
 	return ts
+
+## The REAL terrain TileSet (walkable + ramp custom-data layers populated), built
+## in-memory against a blank atlas -- same recipe as _test_walkable_semantics.
+## Used by the #78 ramp-derivation tests so ramp_query has a `ramp` layer to read.
+func _build_terrain_tileset() -> TileSet:
+	var img := Image.create(TileSetConstants.ATLAS_PX.x, TileSetConstants.ATLAS_PX.y, false, Image.FORMAT_RGBA8)
+	var tex := ImageTexture.create_from_image(img)
+	return TileSetBuilder.build_terrain_tileset(tex)
+
+## A TileMapLayer bound to `ts` and added to root, painting each cell in `cells`
+## with the atlas tile at `atlas` (all same source). Caller update_internals() +
+## queue_free()s it. Keeps the ramp-derivation tests terse.
+func _make_layer(ts: TileSet, cells: Array, atlas: Vector2i) -> TileMapLayer:
+	var layer := TileMapLayer.new()
+	layer.tile_set = ts
+	root.add_child(layer)
+	var source_id := ts.get_source_id(0)
+	for c: Vector2i in cells:
+		layer.set_cell(c, source_id, atlas)
+	layer.update_internals()
+	return layer
 
 # --- tests ---
 
@@ -239,3 +269,161 @@ func _test_walkable_semantics() -> void:
 	_ok(not within.is_empty(), "graph: same-side ground path routes")
 
 	layer.queue_free()
+
+## ramps_from_layers derives exactly one NavRamp when a HIGH-tier ramp tile has a
+## single walkable LOWER-tier cartesian neighbour: tier-0 ground row incl. (2,0),
+## a ramp tile painted at (2,1) on tier 1 -> the sole ramp links (2,0)@0 to
+## (2,1)@1 with the default weight 1.0.
+func _test_ramps_from_layers_valid() -> void:
+	var ts := _build_terrain_tileset()
+	var ground: Vector2i = TileSetConstants.LOOKUP[1]
+	var ramp_atlas: Vector2i = TileSetConstants.RAMP_COORDS[0]
+	var t0 := _make_layer(ts, [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)], ground)
+	var t1 := _make_layer(ts, [Vector2i(2, 1)], ramp_atlas)
+
+	var ramps := NavMapBuilder.ramps_from_layers([t0, t1])
+	_i_eq(ramps.size(), 1, "ramps_from_layers derives one ramp")
+	if ramps.size() == 1:
+		var r: NavRamp = ramps[0]
+		_v_eq(r.low_cell, Vector2i(2, 0), "derived ramp low_cell")
+		_i_eq(r.low_tier, 0, "derived ramp low_tier")
+		_v_eq(r.high_cell, Vector2i(2, 1), "derived ramp high_cell")
+		_i_eq(r.high_tier, 1, "derived ramp high_tier")
+		_ok(r.weight == 1.0, "derived ramp weight is 1.0 got %s" % r.weight)
+
+	t0.queue_free()
+	t1.queue_free()
+
+## A plain GROUND tile on the high tier (no `ramp` custom data) yields NO ramps,
+## even directly above a walkable lower neighbour -- only painted ramp tiles count.
+func _test_ramps_from_layers_none() -> void:
+	var ts := _build_terrain_tileset()
+	var ground: Vector2i = TileSetConstants.LOOKUP[1]
+	var t0 := _make_layer(ts, [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)], ground)
+	var t1 := _make_layer(ts, [Vector2i(2, 1)], ground)   ## plain ground, NOT the ramp coord
+
+	_ok(NavMapBuilder.ramps_from_layers([t0, t1]).is_empty(), "plain ground on high tier derives no ramps")
+
+	t0.queue_free()
+	t1.queue_free()
+
+## A ramp tile whose four cartesian neighbours are all EMPTY on the tier below
+## contributes nothing (a ramp needs a walkable lower endpoint to link to).
+func _test_ramps_from_layers_no_lower_neighbor() -> void:
+	var ts := _build_terrain_tileset()
+	var ground: Vector2i = TileSetConstants.LOOKUP[1]
+	var ramp_atlas: Vector2i = TileSetConstants.RAMP_COORDS[0]
+	# tier-0 ground sits far from (2,1)'s neighbours {(3,1),(1,1),(2,2),(2,0)}.
+	var t0 := _make_layer(ts, [Vector2i(10, 0)], ground)
+	var t1 := _make_layer(ts, [Vector2i(2, 1)], ramp_atlas)
+
+	_ok(NavMapBuilder.ramps_from_layers([t0, t1]).is_empty(), "ramp with no walkable lower neighbour derives no ramp")
+
+	t0.queue_free()
+	t1.queue_free()
+
+## A ramp tile with TWO walkable lower neighbours emits TWO NavRamps -- one per
+## neighbour (the accepted B1 multi-emit). Ramp at (2,1); tier-0 ground at (2,0)
+## and (2,2) -> low endpoints are exactly those two cells.
+func _test_ramps_from_layers_multi_neighbor() -> void:
+	var ts := _build_terrain_tileset()
+	var ground: Vector2i = TileSetConstants.LOOKUP[1]
+	var ramp_atlas: Vector2i = TileSetConstants.RAMP_COORDS[0]
+	var t0 := _make_layer(ts, [Vector2i(2, 0), Vector2i(2, 2)], ground)
+	var t1 := _make_layer(ts, [Vector2i(2, 1)], ramp_atlas)
+
+	var ramps := NavMapBuilder.ramps_from_layers([t0, t1])
+	_i_eq(ramps.size(), 2, "two walkable lower neighbours derive two ramps")
+	var lows := {}
+	for r: NavRamp in ramps:
+		lows[r.low_cell] = true
+		_v_eq(r.high_cell, Vector2i(2, 1), "multi-emit ramp high_cell")
+		_i_eq(r.high_tier, 1, "multi-emit ramp high_tier")
+		_i_eq(r.low_tier, 0, "multi-emit ramp low_tier")
+	_ok(lows.has(Vector2i(2, 0)) and lows.has(Vector2i(2, 2)), "multi-emit low endpoints are (2,0) and (2,2)")
+
+	t0.queue_free()
+	t1.queue_free()
+
+## Derivation is deterministic: two calls over the same layers return identical
+## endpoint / tier / weight sequences (sorted ramp cells + fixed OFFSETS order).
+func _test_ramps_from_layers_deterministic() -> void:
+	var ts := _build_terrain_tileset()
+	var ground: Vector2i = TileSetConstants.LOOKUP[1]
+	var ramp_atlas: Vector2i = TileSetConstants.RAMP_COORDS[0]
+	var t0 := _make_layer(ts, [Vector2i(2, 0), Vector2i(2, 2), Vector2i(5, 0)], ground)
+	var t1 := _make_layer(ts, [Vector2i(2, 1), Vector2i(5, 1)], ramp_atlas)
+
+	var a := NavMapBuilder.ramps_from_layers([t0, t1])
+	var b := NavMapBuilder.ramps_from_layers([t0, t1])
+	_i_eq(a.size(), b.size(), "deterministic: same ramp count")
+	var identical := a.size() == b.size()
+	for i in range(min(a.size(), b.size())):
+		var ra: NavRamp = a[i]
+		var rb: NavRamp = b[i]
+		if ra.low_cell != rb.low_cell or ra.low_tier != rb.low_tier \
+				or ra.high_cell != rb.high_cell or ra.high_tier != rb.high_tier or ra.weight != rb.weight:
+			identical = false
+	_ok(identical, "ramps_from_layers is deterministic across calls")
+
+	t0.queue_free()
+	t1.queue_free()
+
+## ramp_query is false everywhere over a MINIMAL tileset (no `ramp` custom-data
+## layer) even on a painted cell, and ramp_query(null) is false everywhere --
+## mirrors walkable_query's absent-layer / null-layer null-safety, but defaults
+## to FALSE (absent ramp semantics == no ramps).
+func _test_ramp_query_absent_layer() -> void:
+	var ts := _build_tileset()   ## minimal TS: no walkable/ramp custom-data layers.
+	var layer := _make_layer(ts, [Vector2i(2, 1)], Vector2i(0, 0))
+
+	var q := NavMapBuilder.ramp_query(layer)
+	_ok(not q.call(Vector2i(2, 1)), "ramp_query false on painted cell (absent ramp layer)")
+	_ok(not q.call(Vector2i(9, 9)), "ramp_query false on unpainted cell (absent ramp layer)")
+
+	var qnull := NavMapBuilder.ramp_query(null)
+	_ok(not qnull.call(Vector2i(2, 1)), "ramp_query(null) false everywhere")
+
+	layer.queue_free()
+
+## from_map_system DERIVES ramps from painted ramp tiles with NO extra_ramps: a
+## stub carrying [tier-0 ground, tier-1 ramp] yields a graph whose cross-tier
+## find_path (2,0)@0 -> (2,1)@1 is non-empty, starts/ends at the endpoints, and
+## visits both tiers. Erasing the ramp cell + rebuilding severs the link -> [].
+func _test_from_map_system_derives() -> void:
+	var ts := _build_terrain_tileset()
+	var ground: Vector2i = TileSetConstants.LOOKUP[1]
+	var ramp_atlas: Vector2i = TileSetConstants.RAMP_COORDS[0]
+	var t0 := _make_layer(ts, [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)], ground)
+	var t1 := _make_layer(ts, [Vector2i(2, 1)], ramp_atlas)
+
+	var stub := MapSystemStub.new()
+	stub.elevation_layers = [t0, t1]
+
+	var graph := NavMapBuilder.from_map_system(stub)   ## NO extra ramps -> purely derived.
+	var path := graph.find_path(Vector2i(2, 0), 0, Vector2i(2, 1), 1)
+	_ok(not path.is_empty(), "from_map_system(derived) cross-tier path is non-empty")
+	if not path.is_empty():
+		var first: Dictionary = path[0]
+		var last: Dictionary = path[path.size() - 1]
+		var fc: Vector2i = first["cell"]
+		var ft: int = first["tier"]
+		var lc: Vector2i = last["cell"]
+		var lt: int = last["tier"]
+		_ok(fc == Vector2i(2, 0) and ft == 0, "derived path starts at (2,0)@0 got (%s,%d)" % [fc, ft])
+		_ok(lc == Vector2i(2, 1) and lt == 1, "derived path ends at (2,1)@1 got (%s,%d)" % [lc, lt])
+		var tiers := {}
+		for step in path:
+			var t: int = step["tier"]
+			tiers[t] = true
+		_ok(tiers.has(0) and tiers.has(1), "derived cross-tier path visits both tiers")
+
+	# Erase the ramp tile and rebuild: the derived ramp vanishes -> no cross-tier path.
+	t1.set_cell(Vector2i(2, 1))   ## source_id defaults to -1 -> clears the cell.
+	t1.update_internals()
+	var graph_cleared := NavMapBuilder.from_map_system(stub)
+	var blocked := graph_cleared.find_path(Vector2i(2, 0), 0, Vector2i(2, 1), 1)
+	_ok(blocked.is_empty(), "from_map_system(derived) path is [] once the ramp tile is erased")
+
+	t0.queue_free()
+	t1.queue_free()

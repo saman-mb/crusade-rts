@@ -33,8 +33,8 @@ from PIL import Image
 
 # --- Layout constants (mirror src/core/tileset_constants.gd) ---
 REGION_W, REGION_H = 128, 64
-ATLAS_W, ATLAS_H = 512, 320
-COLS, ROWS = ATLAS_W // REGION_W, ATLAS_H // REGION_H   # 4 x 5
+ATLAS_W, ATLAS_H = 512, 384
+COLS, ROWS = ATLAS_W // REGION_W, ATLAS_H // REGION_H   # 4 x 6
 
 # --- Defaults ---
 DEFAULT_STRENGTH = 2.5          # relief exaggeration; higher = steeper normals

@@ -78,7 +78,7 @@ def test_real_atlas_dims_and_relief():
         return
     img = g.build_normal_atlas(path)
     out = np.asarray(img)
-    ok(img.size == (g.ATLAS_W, g.ATLAS_H), "output is ATLAS_PX (512x320)")
+    ok(img.size == (g.ATLAS_W, g.ATLAS_H), "output is ATLAS_PX (512x384)")
     ok(img.mode == "RGB", "output is RGB")
     ok(out[..., 2].mean() > out[..., 0].mean() and out[..., 2].mean() > out[..., 1].mean(),
        "blue (+Z) dominant: mean B %.1f R %.1f G %.1f" % (out[..., 2].mean(), out[..., 0].mean(), out[..., 1].mean()))
