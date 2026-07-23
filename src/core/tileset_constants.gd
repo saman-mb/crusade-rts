@@ -18,6 +18,19 @@ const ATLAS_PATH := "res://assets/tilesets/terrain_atlas.png"
 const NORMAL_ATLAS_PATH := "res://assets/tilesets/terrain_atlas_n.png"
 
 const WATER_ANIM_COORDS := Vector2i(0, 4)       ## atlas coord (col,row) of the animated water base tile (row 4)
+
+## Per-tile walkability, exposed to the runtime as a TYPE_BOOL TileSet custom-data
+## layer the builder populates. WALKABLE_LAYER is the layer name (single source of
+## truth for both the builder and any reader). Ground is walkable by default;
+## NON_WALKABLE_COORDS is an allowlist-of-exceptions -- only water carves a hole
+## today, but cliffs/props append here as they arrive without touching the builder.
+const WALKABLE_LAYER := "walkable"
+const NON_WALKABLE_COORDS: Array[Vector2i] = [WATER_ANIM_COORDS]
+
+## True when a tile at `coord` is walkable (i.e. not in the exceptions allowlist).
+static func coord_walkable(coord: Vector2i) -> bool:
+	return not NON_WALKABLE_COORDS.has(coord)
+
 const WATER_FRAMES := 4
 const WATER_COLUMNS := 4
 const WATER_FRAME_DURATION := 0.2               ## seconds/frame (~5fps)

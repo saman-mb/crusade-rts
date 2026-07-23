@@ -19,6 +19,8 @@ func _run() -> void:
 	if src != null:
 		_test_tiles(src)
 		_test_water_animation(src)
+		_test_walkable_layer(ts, src)
+	_test_walkable_table_independent()
 	_test_animation_bounds_independent()
 	_test_committed_asset()
 	_test_make_atlas_texture(tex)
@@ -93,6 +95,45 @@ func _test_water_animation(src: TileSetAtlasSource) -> void:
 			"water frame %d duration %f != %f" % [i, dur, TileSetConstants.WATER_FRAME_DURATION])
 	_ok(src.get_tile_animation_mode(water) == TileSetAtlasSource.TILE_ANIMATION_MODE_RANDOM_START_TIMES,
 		"water animation mode is not RANDOM_START_TIMES")
+
+## Per-tile walkability (#96): the TYPE_BOOL "walkable" custom-data layer exists,
+## every ground (LOOKUP) tile is walkable, and the water tile is not.
+func _test_walkable_layer(ts: TileSet, src: TileSetAtlasSource) -> void:
+	_ok(ts.get_custom_data_layers_count() >= 1, "no custom-data layers registered")
+	var idx: int = ts.get_custom_data_layer_by_name(TileSetConstants.WALKABLE_LAYER)
+	_ok(idx != -1, "no custom-data layer named %s" % TileSetConstants.WALKABLE_LAYER)
+	if idx == -1:
+		return
+	_ok(ts.get_custom_data_layer_type(idx) == TYPE_BOOL,
+		"walkable layer type %d != TYPE_BOOL" % ts.get_custom_data_layer_type(idx))
+
+	# Every distinct non-sentinel ground tile is walkable.
+	var seen: Dictionary = {}
+	for coord in TileSetConstants.LOOKUP:
+		if coord == Vector2i(-1, -1) or seen.has(coord):
+			continue
+		seen[coord] = true
+		var data := src.get_tile_data(coord, 0)
+		if data != null:
+			_ok(bool(data.get_custom_data(TileSetConstants.WALKABLE_LAYER)) == true,
+				"ground tile %s should be walkable" % coord)
+
+	# Water is not walkable.
+	var water := TileSetConstants.WATER_ANIM_COORDS
+	var wdata := src.get_tile_data(water, 0)
+	_ok(wdata != null, "no water tile at %s" % water)
+	if wdata != null:
+		_ok(bool(wdata.get_custom_data(TileSetConstants.WALKABLE_LAYER)) == false,
+			"water tile %s should NOT be walkable" % water)
+
+## INDEPENDENT table guard (#96): walkability is decided by TileSetConstants,
+## checked directly here so a builder that silently stopped writing the layer
+## cannot be masked by _test_walkable_layer reading the builder's own output.
+func _test_walkable_table_independent() -> void:
+	_ok(TileSetConstants.coord_walkable(TileSetConstants.WATER_ANIM_COORDS) == false,
+		"table says water is walkable")
+	_ok(TileSetConstants.coord_walkable(TileSetConstants.LOOKUP[1]) == true,
+		"table says a ground LOOKUP coord is not walkable")
 
 ## INDEPENDENT atlas-bounds guard for the water animation strip (#31). Derived
 ## purely from the geometry constants + arithmetic, NOT from the builder's

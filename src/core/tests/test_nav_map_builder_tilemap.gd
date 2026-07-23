@@ -56,6 +56,7 @@ func _run() -> void:
 	_test_cross_tier_path(layer0, layer1, painted0, painted1)
 	_test_intra_tier_hole_blocks(layer0, layer1)
 	_test_from_map_system(layer0, layer1, painted0, painted1)
+	_test_walkable_semantics()
 
 	layer0.queue_free()
 	layer1.queue_free()
@@ -187,3 +188,54 @@ func _test_from_map_system(layer0: TileMapLayer, layer1: TileMapLayer, painted0:
 	# Null map_system -> null (documented no-map contract).
 	var from_null := NavMapBuilder.from_map_system(null, [ramp])
 	_ok(from_null == null, "from_map_system(null) returns null")
+
+## Per-tile walkability (#96): against a REAL terrain TileSet whose `walkable`
+## custom-data layer is populated (ground true, water false), walkable_query must
+## read the layer, not bare source presence. Ground cells answer true, a painted
+## water cell answers false, an unpainted cell false, and walkable_query(null)
+## false. The NavGraph built over the row marks the water cell solid, so a
+## same-row path forced straight through it (no detour in a 1-tall region) is [].
+func _test_walkable_semantics() -> void:
+	var img := Image.create(TileSetConstants.ATLAS_PX.x, TileSetConstants.ATLAS_PX.y, false, Image.FORMAT_RGBA8)
+	var tex := ImageTexture.create_from_image(img)
+	var ts := TileSetBuilder.build_terrain_tileset(tex)
+	var source_id := ts.get_source_id(0)
+	var ground_atlas: Vector2i = TileSetConstants.LOOKUP[1]     ## a real, walkable ground tile.
+	var water_atlas := TileSetConstants.WATER_ANIM_COORDS       ## the non-walkable water tile.
+
+	# A single ground row with ONE water cell painted inside it (same atlas source).
+	var layer := TileMapLayer.new()
+	layer.tile_set = ts
+	root.add_child(layer)
+	for x: int in [0, 1, 2, 3, 4]:
+		layer.set_cell(Vector2i(x, 0), source_id, ground_atlas)
+	var water := Vector2i(2, 0)
+	layer.set_cell(water, source_id, water_atlas)
+	layer.update_internals()
+
+	var unpainted := Vector2i(20, 20)
+
+	# walkable_query reads the `walkable` custom-data layer.
+	var q := NavMapBuilder.walkable_query(layer)
+	_ok(q.call(Vector2i(0, 0)), "walkable_query true on ground cell (0,0)")
+	_ok(q.call(Vector2i(4, 0)), "walkable_query true on ground cell (4,0)")
+	_ok(not q.call(water), "walkable_query false on painted water cell %s" % water)
+	_ok(not q.call(unpainted), "walkable_query false on unpainted cell %s" % unpainted)
+
+	var qnull := NavMapBuilder.walkable_query(null)
+	_ok(not qnull.call(water), "walkable_query(null) false everywhere")
+
+	# The NavGraph over this row marks the water cell solid; ground stays walkable.
+	var graph := NavMapBuilder.build([layer], [])
+	var grid := graph.tier_grid(0)
+	_ok(not grid.is_walkable(water), "graph: water cell %s is not walkable" % water)
+	_ok(grid.is_walkable(Vector2i(0, 0)), "graph: ground cell (0,0) is walkable")
+
+	# A straight same-row path must cross the water cell; the 1-tall region offers
+	# no detour, so the path is [] (water is a hard wall), while a same-side path routes.
+	var across := graph.find_path(Vector2i(0, 0), 0, Vector2i(4, 0), 0)
+	_ok(across.is_empty(), "graph: path forced across the water cell is []")
+	var within := graph.find_path(Vector2i(0, 0), 0, Vector2i(1, 0), 0)
+	_ok(not within.is_empty(), "graph: same-side ground path routes")
+
+	layer.queue_free()
