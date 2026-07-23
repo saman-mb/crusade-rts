@@ -114,22 +114,36 @@ func _process(delta: float) -> void:
 	var rpos: Vector2 = r["pos"]
 	var rcell: Vector2i = r["cell"]
 	var rtier: int = r["tier"]
+	# Cross-tier RENDER interpolation (#79): while traversing a ramp the follower
+	# reports the segment's source/target tier and a 0..1 progress, so the art offset
+	# glides between the two tier heights instead of snapping at the handoff instant.
+	# `.get` with a discrete-tier fallback keeps this null-safe for any follower that
+	# does not supply the keys (e.g. a plain flat step).
+	var from_tier: int = r.get("from_tier", rtier)
+	var to_tier: int = r.get("to_tier", rtier)
+	var tier_progress: float = r.get("tier_progress", 1.0)
 
 	_state.world_pos = rpos
 
 	if rtier != _state.tier:
-		# Tier handoff: raise the art onto the new tier now, and move the node into
-		# the new tier's container. The reparent is DEFERRED — detaching/re-attaching
-		# self synchronously inside _process is unsafe tree mutation; the containers
-		# all sit at the origin in one Y-sort space, so a one-idle-frame delay is
-		# invisible (the node's origin/position is unchanged in the meantime).
-		var sprite: Sprite2D = $Sprite2D
-		sprite.position = EntityPlacement.visual_offset(rtier)
+		# Tier handoff: move the node into the new tier's container. The reparent is
+		# DEFERRED — detaching/re-attaching self synchronously inside _process is unsafe
+		# tree mutation; the containers all sit at the origin in one Y-sort space, so a
+		# one-idle-frame delay is invisible. The art offset is applied unconditionally
+		# below (interpolated), so the raise no longer needs to snap here.
 		_reparent_to_tier.call_deferred(rtier)
 
 	_state.tier = rtier
 	_state.cell = rcell
-	position = _state.ground_position()
+
+	# Apply the INTERPOLATED elevation offset to the sprite, and place the node origin
+	# so the drawn art lands at world_pos while the sort anchor tracks the interpolated
+	# footprint (no pop at the tier handoff). On a flat segment this equals the discrete
+	# tier offset, so level-ground rendering is unchanged.
+	var art: Vector2 = ElevationLerp.offset(from_tier, to_tier, tier_progress)
+	var sprite: Sprite2D = $Sprite2D
+	sprite.position = art
+	position = _state.world_pos - art
 
 
 ## Reparent this unit under `entity_parent_for_tier(tier)`. Null-safe: if MapSystem

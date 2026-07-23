@@ -15,6 +15,7 @@ func _run() -> void:
 	_test_interpolation_half_segment()
 	_test_arrival_and_stop()
 	_test_ramp_tier_handoff()
+	_test_ramp_segment_progress()
 	_test_large_delta_no_overshoot()
 	_test_no_path()
 	_test_repath_resets()
@@ -117,6 +118,50 @@ func _test_ramp_tier_handoff() -> void:
 	_ok(top_cell == high_cell, "cell handed off to the high waypoint")
 	_ok(bool(top["done"]), "reaching the final (high) waypoint is done")
 	_ok(_v_approx(top_pos, high_target), "snapped exactly onto the high target")
+
+
+## The cross-tier RENDER segment fields (#79): climbing a ramp, advance reports
+## from_tier == the tier being left, to_tier == the higher tier, and tier_progress
+## sweeping 0->1 across the segment. At the top handoff the segment resets to flat
+## (from == to, progress reflects the next flat segment), so a renderer feeding these
+## to ElevationLerp gets a smooth rise then a clean hold -- no snap.
+func _test_ramp_segment_progress() -> void:
+	var low_cell := Vector2i(2, 2)
+	var high_cell := Vector2i(2, 1)
+	var low_target: Vector2 = EntityPlacement.visual_position(low_cell, 0)
+	var high_target: Vector2 = EntityPlacement.visual_position(high_cell, 1)
+	var seg_len: float = low_target.distance_to(high_target)
+
+	var pf := PathFollower.new()
+	pf.speed = seg_len       # delta 0.25 -> a quarter of the way up the ramp
+	pf.set_path([
+		{ "cell": low_cell, "tier": 0 },
+		{ "cell": high_cell, "tier": 1 },
+	])
+
+	# Quarter of the way up: reports the low->high segment with ~0.25 progress.
+	var q: Dictionary = pf.advance(low_target, 0.25)
+	var q_from: int = q["from_tier"]
+	var q_to: int = q["to_tier"]
+	var q_prog: float = q["tier_progress"]
+	_ok(q_from == 0, "mid-ramp from_tier is the tier being left (0)")
+	_ok(q_to == 1, "mid-ramp to_tier is the higher tier (1)")
+	_ok(absf(q_prog - 0.25) < 0.001, "mid-ramp tier_progress ~0.25")
+	# The interpolated offset lies strictly between the two tier heights.
+	var mid_off: Vector2 = ElevationLerp.offset(q_from, q_to, q_prog)
+	_ok(mid_off.y < MapConstants.elevation_offset(0).y and mid_off.y > MapConstants.elevation_offset(1).y,
+		"mid-ramp interpolated offset strictly between the tiers")
+
+	# Reach the top: occupancy is tier 1 and, done, the segment is flat at tier 1 with
+	# progress 1.0 -> ElevationLerp resolves to the exact tier-1 offset (clean hold).
+	var top: Dictionary = pf.advance(q["pos"], 1.0)
+	var t_from: int = top["from_tier"]
+	var t_to: int = top["to_tier"]
+	var t_prog: float = top["tier_progress"]
+	_ok(t_from == 1 and t_to == 1, "after handoff the segment is flat at tier 1")
+	_ok(absf(t_prog - 1.0) < 0.001, "settled segment progress is 1.0")
+	_ok(ElevationLerp.offset(t_from, t_to, t_prog) == MapConstants.elevation_offset(1),
+		"settled offset equals the exact tier-1 height")
 
 
 ## A single huge-delta advance across three CLOSE waypoints stops EXACTLY on the
