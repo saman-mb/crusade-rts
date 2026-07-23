@@ -11,6 +11,12 @@ extends Node2D
 ## This is a RUNTIME node (not `@tool`), so none of this executes during a
 ## headless `--import` in CI.
 
+## Bundled first-run showcase map (#99). When no user map exists yet at
+## `current_map_path`, `_setup` loads this read-only res:// map so a fresh checkout
+## opens on real multi-tier terrain instead of an empty void. A saved user map
+## always wins; this only fills the gap before the first F6 save.
+const SHOWCASE_MAP_PATH := "res://assets/maps/showcase.json"
+
 @export_group("Map Persistence")
 ## The MapSystem whose elevation stack + objects overlay are saved/loaded.
 @export var map_system_path: NodePath
@@ -50,9 +56,33 @@ func _setup() -> void:
 	var l0 := _map_system.get_elevation_layer(0) as TileMapLayer
 	if l0 != null:
 		_tile_set = l0.tile_set
-	# Record the current mtime but do NOT auto-load on start: the editor owns the
-	# initial paint; reload is explicit (F5 or auto_reload polling).
+	# Record the current mtime but do NOT auto-load a USER map on start: the editor
+	# owns the initial paint; a user-map reload is explicit (F5 or auto_reload polling).
 	_last_mtime = MapFileIO.modified_time(current_map_path)
+	# First-run fallback (#99): with no saved user map yet, the layers would render as
+	# a blank void. Load the bundled read-only showcase so a fresh checkout opens on
+	# real multi-tier terrain. This runs ONLY when the user map is absent, so a saved
+	# map is never overwritten in the view -- the moment one exists, F5/auto_reload
+	# take over. Needs the shared TileSet bound (guaranteed here: _setup runs deferred,
+	# after the MapEditor built it); without it we leave the map blank rather than
+	# clearing the layers past a validator that would drop every cell.
+	if _tile_set != null and not MapFileIO.file_exists(current_map_path):
+		_load_showcase()
+
+
+## Loads the bundled first-run showcase map into the live layers (#99). Kept separate
+## from `_reload()` -- which targets the user map at `current_map_path` -- so the startup
+## fallback stays self-contained and does not disturb the reload/save path.
+func _load_showcase() -> void:
+	var r := MapFileIO.load_text(SHOWCASE_MAP_PATH)
+	if not r["ok"]:
+		push_warning("map_persistence: bundled showcase %s missing; first run stays blank." % SHOWCASE_MAP_PATH)
+		return
+	var res := MapLoader.load_map(r["text"], _layers(), _objects(), _tile_set)
+	print("[MapPersistence] first-run showcase loaded from %s (ok=%s, %d diagnostics)" % [SHOWCASE_MAP_PATH, res["ok"], (res["diagnostics"] as Array).size()])
+	# Announce the freshly-loaded extent so the camera clamp reframes onto the showcase.
+	if res["ok"]:
+		_map_system.emit_map_changed_all()
 
 
 ## Returns the MapSystem's elevation layers, or an empty typed array when unbound.
