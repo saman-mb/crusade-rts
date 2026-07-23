@@ -3,9 +3,10 @@ extends RefCounted
 ## Thin runtime adapter: turns a stack of live elevation TileMapLayers into a
 ## headless NavGraph. ALL pathfinding logic lives in the cores (NavGraph /
 ## NavTierGrid / NavPortalGraph) -- this file only reads the live TileSet API
-## (get_used_rect / get_cell_source_id) and wires the pieces together. A tile is
-## walkable on a tier iff that tier's layer paints a real tile there
-## (source_id != -1 == BrushCore.EMPTY_SOURCE_ID == no tile == hole/cliff).
+## (get_used_rect / get_cell_tile_data) and wires the pieces together. A tile is
+## walkable on a tier iff that tier's layer paints a real tile there AND that
+## tile's `walkable` custom data is true (see walkable_query); an empty cell
+## (no tile == hole/cliff) or a tile flagged unwalkable (e.g. water) is solid.
 
 ## Union of every layer's get_used_rect(). Nulls and cell-less layers are
 ## skipped (a painted-nothing layer reports a 0-size rect that would wrongly
@@ -26,12 +27,27 @@ static func compute_region(layers: Array) -> Rect2i:
 			region = region.merge(used)
 	return region
 
-## A (cell -> bool) walkability probe closed over one layer: true iff the layer
-## exists and paints a real tile at `cell` (source_id != -1). Null-safe: a null
-## layer answers false everywhere. Shape matches NavTierGrid's `walkable` arg.
+## A (cell -> bool) walkability probe closed over one layer: true iff a tile is
+## painted at `cell` AND that tile's `walkable` custom-data (TileSetConstants.
+## WALKABLE_LAYER) is true. An empty cell -- a hole/cliff -- is never walkable
+## (preserves the old get_cell_source_id == -1 contract). A layer whose TileSet
+## carries no `walkable` layer treats any painted tile as walkable, so minimal
+## test tilesets (no custom-data) still navigate. Null-safe: a null layer answers
+## false everywhere. Shape matches NavTierGrid's `walkable` arg. The layer-presence
+## lookup is resolved ONCE outside the closure so every probe stays O(1).
 static func walkable_query(layer) -> Callable:
+	if layer == null:
+		return func(_cell: Vector2i) -> bool: return false
+	var ts: TileSet = layer.tile_set
+	var has_layer: bool = ts != null and ts.get_custom_data_layer_by_name(TileSetConstants.WALKABLE_LAYER) != -1
 	return func(cell: Vector2i) -> bool:
-		return layer != null and layer.get_cell_source_id(cell) != -1
+		var data: TileData = layer.get_cell_tile_data(cell)
+		if data == null:            # empty cell / hole / cliff -> not walkable (preserves the old get_cell_source_id==-1 contract)
+			return false
+		if not has_layer:           # tileset carries no semantics -> painted tile == walkable (back-compat with minimal test tilesets)
+			return true
+		var value: Variant = data.get_custom_data(TileSetConstants.WALKABLE_LAYER)
+		return bool(value)
 
 ## Builds a NavGraph from the layer stack: region = layer union grown to include
 ## every ramp endpoint (so no ramp endpoint id falls outside the grid), one

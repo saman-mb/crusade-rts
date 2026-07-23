@@ -40,6 +40,13 @@ static func build_terrain_tileset(texture: Texture2D, normal: Texture2D = null) 
 	src.texture_region_size = TileSetConstants.REGION_SIZE
 	ts.add_source(src)
 
+	# Register the per-tile walkability layer once, before any tile exists, so
+	# every get_tile_data(...).set_custom_data(WALKABLE_LAYER, ...) below resolves.
+	ts.add_custom_data_layer()
+	var idx: int = ts.get_custom_data_layers_count() - 1
+	ts.set_custom_data_layer_name(idx, TileSetConstants.WALKABLE_LAYER)
+	ts.set_custom_data_layer_type(idx, TYPE_BOOL)
+
 	# De-duplicate coords: LOOKUP repeats atlas coords across its 16 entries and
 	# create_tile() must never be called twice for the same coord.
 	var seen: Dictionary = {}
@@ -51,6 +58,7 @@ static func build_terrain_tileset(texture: Texture2D, normal: Texture2D = null) 
 		seen[coord] = true
 		src.create_tile(coord)
 		src.get_tile_data(coord, 0).texture_origin = TileSetConstants.TEXTURE_ORIGIN
+		src.get_tile_data(coord, 0).set_custom_data(TileSetConstants.WALKABLE_LAYER, TileSetConstants.coord_walkable(coord))
 
 	# Water lives at its own row (WATER_ANIM_COORDS) so it never collides with a
 	# LOOKUP coord; create it separately and wire up its animation.
@@ -58,6 +66,9 @@ static func build_terrain_tileset(texture: Texture2D, normal: Texture2D = null) 
 	if not seen.has(water):
 		src.create_tile(water)
 		src.get_tile_data(water, 0).texture_origin = TileSetConstants.TEXTURE_ORIGIN
+	# Water is non-walkable; set it unconditionally so it holds even if the water
+	# coord had already been created as a LOOKUP tile above.
+	src.get_tile_data(water, 0).set_custom_data(TileSetConstants.WALKABLE_LAYER, TileSetConstants.coord_walkable(water))
 	configure_water_animation(src, water)
 
 	return ts
