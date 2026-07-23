@@ -80,6 +80,10 @@ func current_tier() -> int:
 ## UnitState change; the ring sits at the node origin (footprint) so it never
 ## perturbs the origin's sort key (docs/ENTITY_SORTING.md).
 func set_selected(p_selected: bool) -> void:
+	# Null-safe: the ring is built in setup(), so a call before setup is a no-op
+	# rather than a crash.
+	if _ring == null:
+		return
 	_ring.visible = p_selected
 
 
