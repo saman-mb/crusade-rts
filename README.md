@@ -71,16 +71,16 @@ Those are scoped as gap-filling epics **#133–#142** and are not implemented on
 > `tools/render_showcase.gd`. The seamless terrain, cliffs and doodads are real
 > engine output; the golden-hour grade + campfire glow are a screenshot post-pass.
 
-![Golden-hour hero shot — a raised grass plateau with a shadowed rock cliff, a soft ground shadow, a campfire glowing at its base, and seamless lush terrain scattered with doodads.](docs/media/hero.png)
+![Golden-hour hero shot — a raised grass plateau with a shadowed rock cliff, a soft ground shadow, a campfire glowing at its base, and seamless lush terrain scattered with doodads.](docs/media/hero-v4.png)
 *The engine at golden hour: seamless mega-tile terrain (no tile grid), a rock cliff with
 a continuous cast shadow, grove-clustered canopy trees, and localised firelight.*
 
-![Wide establishing shot of the showcase world — an animated water lake, a raised plateau ringed by cliff walls, and a doodad-strewn meadow under a warm sky.](docs/media/terrain.png)
+![Wide establishing shot of the showcase world — an animated water lake, a raised plateau ringed by cliff walls, and a doodad-strewn meadow under a warm sky.](docs/media/terrain-v4.png)
 *Seamless multi-tier terrain: positional mega-tiles kill the repeating grid entirely, over
 SC1-style gritty ground with earth showing through — a lake with a shoreline transition, a
 two-tier cliff-walled plateau, groves of trees, and scattered doodads.*
 
-![Close-up of the plateau's cliff face — a shadowed earthen wall with a sunlit top lip and a soft cast shadow grounding it on the meadow below.](docs/media/cliffs.png)
+![Close-up of the plateau's cliff face — a shadowed earthen wall with a sunlit top lip and a soft cast shadow grounding it on the meadow below.](docs/media/cliffs-v4.png)
 *True verticality: elevation tiers render real rocky cliff walls (strata, cracks, sunlit
 lip, hanging tufts) with a continuous ground shadow and a dirt ramp breaking the wall, so
 raised terrain reads as solid height.*
