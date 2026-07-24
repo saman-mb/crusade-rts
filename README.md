@@ -1,8 +1,19 @@
 # Crusade — Isometric Map Engine & Editor Framework
 
 [![CI](https://github.com/saman-mb/crusade-rts/actions/workflows/ci.yml/badge.svg)](https://github.com/saman-mb/crusade-rts/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/saman-mb/crusade-rts?sort=semver&color=orange)](https://github.com/saman-mb/crusade-rts/releases)
+[![License: MIT](https://img.shields.io/github/license/saman-mb/crusade-rts?color=blue)](LICENSE)
+[![Godot](https://img.shields.io/badge/Godot-4.4.1-478CBF?logo=godotengine&logoColor=white)](https://godotengine.org/)
+[![GDScript](https://img.shields.io/badge/GDScript-100%25-355570?logo=godotengine&logoColor=white)](https://docs.godotengine.org/en/stable/tutorials/scripting/gdscript/index.html)
+[![Last commit](https://img.shields.io/github/last-commit/saman-mb/crusade-rts)](https://github.com/saman-mb/crusade-rts/commits/main)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Stars](https://img.shields.io/github/stars/saman-mb/crusade-rts?style=flat&logo=github)](https://github.com/saman-mb/crusade-rts/stargazers)
 
 > **Codename:** Crusade (`crusade-rts`)
+>
+> **Open source (MIT).** Built in the open as a clean, headless-tested Godot 4 base —
+> fork it as a starting point for your own isometric RTS. Contributions welcome
+> (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 A high-performance 2D isometric map runtime and in-game editor built in **Godot 4.4.1**.
 
