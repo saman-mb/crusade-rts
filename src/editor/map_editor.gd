@@ -40,6 +40,9 @@ const FILL_MAX_CELLS := 4096
 ## Corner mask of the fully-filled dual-grid tile (TL|TR|BL|BR = 1|2|4|8 = 15). Its
 ## `TileSetConstants.LOOKUP` entry -- Vector2i(3, 3) -- is the editor's default brush.
 const FILLED_TILE_MASK := 15
+## Shared terrain tint shader (#233): smooth low-frequency world-space colour
+## variation applied to every elevation layer. A missing shader degrades to untinted.
+const TERRAIN_TINT_SHADER := "res://assets/shaders/terrain_tint.gdshader"
 
 ## The resolved MapSystem node. Typed via class_name (#105): its
 ## `get_elevation_layer()` / `tier_count()` / `elevation_layers` API resolves
@@ -108,11 +111,19 @@ func _setup() -> void:
 
 	# Build the TileSet once and share it across every elevation layer that lacks
 	# one plus the preview layer, so all paint/ghost cells resolve identically.
+	# Each elevation layer also gets the shared terrain tint material (#233) -- a
+	# low-frequency world-space noise that gives the ground smooth meadow-like
+	# colour variation with no tile boundary (the preview ghost stays untinted).
 	var ts := TileSetBuilder.build_terrain_tileset(tex, normal)
+	var tint_mat := _make_terrain_tint_material()
 	for i in _layer_count():
 		var layer := _map_system.get_elevation_layer(i) as TileMapLayer
-		if layer != null and layer.tile_set == null:
+		if layer == null:
+			continue
+		if layer.tile_set == null:
 			layer.tile_set = ts
+		if tint_mat != null and layer.material == null:
+			layer.material = tint_mat
 	_preview.tile_set = ts
 
 	_source_id = ts.get_source_id(0)
@@ -123,6 +134,19 @@ func _setup() -> void:
 	# config (it was previously duplicated here).
 
 	_set_active_level(0)
+
+
+## Builds the shared terrain tint ShaderMaterial (#233) from the committed shader,
+## or null if the shader is missing (callers then leave the layers untinted). One
+## material instance is shared across every elevation layer -- the noise is sampled
+## in world space, so a single shared material tints the whole map coherently.
+func _make_terrain_tint_material() -> ShaderMaterial:
+	var shader := load(TERRAIN_TINT_SHADER) as Shader
+	if shader == null:
+		return null
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	return mat
 
 
 ## Re-binds a swapped-in TileSet: assigns it to every elevation layer + the preview

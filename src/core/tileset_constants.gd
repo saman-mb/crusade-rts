@@ -70,3 +70,41 @@ static func _build_lookup() -> Array[Vector2i]:
 	for mask in range(1, 16):
 		table[mask] = Vector2i(mask & 3, mask >> 2)
 	return table
+
+## --- Per-cell tile variation (#232) ---------------------------------------
+## The fully-surrounded grass tile (corner mask 15 -> LOOKUP[15] == Vector2i(3,3))
+## is the interior tile stamped into every solid-grass cell, so it is the one that
+## reads as a repeating grid. It gets N alternative_tiles (built by TileSetBuilder)
+## that flip/tint the SAME atlas region -- zero extra art -- and TerrainVariation
+## assigns one per cell via VariationPicker so neighbours stop looking identical.
+const INTERIOR_GRASS_MASK := 15
+## Number of grass variants INCLUDING the base tile (index 0) == the four flip
+## orientations. Alternatives 1..3 are built on the interior grass coord. Variation
+## is FLIP-ONLY on purpose: a per-tile flat colour tint would make every diamond a
+## uniformly-shaded patch, and the brightness step at each tile edge re-traces the
+## grid. The smooth, seamless colour variation instead comes from the low-frequency
+## world-space noise in the terrain tint shader (#233), which has no tile boundary.
+const GRASS_VARIANTS := 4
+
+## Interior (fully-surrounded) grass atlas coord, from the single-source LOOKUP.
+static func interior_grass_coord() -> Vector2i:
+	return LOOKUP[INTERIOR_GRASS_MASK]
+
+## Variant count for `coord`: >1 only for coords that carry alternative_tiles. The
+## runtime picker uses this to know how many alternatives a cell may choose from,
+## and skips (returns the base) for every other tile. Water is intentionally left
+## at 1 -- it varies via its animation desync (RANDOM_START_TIMES), not flips.
+static func variant_count_for(coord: Vector2i) -> int:
+	if coord == interior_grass_coord():
+		return GRASS_VARIANTS
+	return 1
+
+## Per-variant tile transform for the terrain variation system (#232). Index 0 is
+## the base tile (identity); indices 1..3 mirror the SAME atlas region through the
+## four flip orientations, relocating the tile's signature features so adjacent
+## cells stop reading as one repeated stamp (a symmetric diamond stays a diamond
+## under either flip). Modulate is left WHITE by design -- see GRASS_VARIANTS: the
+## colour variation is a smooth world-space noise in the tint shader, not a per-
+## tile step. Returns { "flip_h": bool, "flip_v": bool, "modulate": Color }.
+static func variant_transform(index: int) -> Dictionary:
+	return {"flip_h": (index & 1) != 0, "flip_v": (index & 2) != 0, "modulate": Color.WHITE}

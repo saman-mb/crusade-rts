@@ -82,6 +82,7 @@ func _load_showcase() -> void:
 	print("[MapPersistence] first-run showcase loaded from %s (ok=%s, %d diagnostics)" % [SHOWCASE_MAP_PATH, res["ok"], (res["diagnostics"] as Array).size()])
 	# Announce the freshly-loaded extent so the camera clamp reframes onto the showcase.
 	if res["ok"]:
+		_apply_terrain_variation()
 		_map_system.emit_map_changed_all()
 
 
@@ -99,6 +100,16 @@ func _objects() -> TileMapLayer:
 	if _map_system == null:
 		return null
 	return _map_system.objects_layer
+
+
+## Applies the per-cell terrain variation pass (#232) to every elevation layer
+## after a map is populated, so solid-grass fields stop rendering as one repeated
+## tile on a visible grid. Deterministic (VariationPicker), so it is idempotent
+## across reloads and the chosen alternatives round-trip through F6 save.
+func _apply_terrain_variation() -> void:
+	for layer in _layers():
+		if layer != null:
+			TerrainVariation.apply(layer)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -140,6 +151,7 @@ func _reload() -> void:
 	# signal). Only emit on a successful load -- a refused load (e.g. out-of-range
 	# elevation, #106) leaves the layers untouched, so there is nothing to announce.
 	if res["ok"]:
+		_apply_terrain_variation()
 		_map_system.emit_map_changed_all()
 	_last_mtime = MapFileIO.modified_time(current_map_path)
 

@@ -38,10 +38,25 @@ REGION_W, REGION_H = 128, 64
 ATLAS_W, ATLAS_H = 512, 384
 SS = 4                      # supersample factor for anti-aliasing
 FEATHER_PX = 3.0            # grass<->dirt seam softness, in final-res pixels
+# Tier 2 terrain-realism (#233): the diamond silhouette is hardened at the very
+# end (ALPHA_THRESHOLD) so neighbouring diamonds meet at full coverage instead of
+# leaving a semi-transparent 1px band that let the dark void behind the layer show
+# through as a visible grid of seams. GRASS_CONTRAST/GRASS_SATURATION knock the
+# high-contrast tuft "signature" down toward an even field so the base tile reads
+# as texture, not a recognizable stamp -- the variation system (#232) then breaks
+# up what little repetition remains.
+ALPHA_THRESHOLD = 96        # 0..255; alpha >= this -> fully opaque, else fully clear
+GRASS_CONTRAST = 0.70       # <1 flattens the grass tuft contrast toward its mean
+GRASS_SATURATION = 1.02     # slight boost so the averaged grass reads green, not muddy
 
 # --- Source sheet cell selection (in source-cell units) ---
 GRASS_DIRT_COLS, GRASS_DIRT_ROWS = 4, 7
-GRASS_CELL = (1, 3)        # a clean, fully-grass cell of the Grass A->Dirt A sheet
+# The interior grass tile is the AVERAGE of a few grass-dominant source cells
+# (#233). Every cell of this Grass A->Dirt A sheet is really a grass/dirt
+# transition, so any single crop carries a recognizable patch ("signature") that
+# reads as a stamp when tiled. Averaging a few dilutes any one feature into an
+# even grass field, which the flip variants (#232) + tint shader then finish off.
+GRASS_CELLS = [(1, 3), (0, 0), (2, 3)]
 DIRT_CELL = (1, 4)         # the matching fully-dirt cell
 WATER_COLS, WATER_ROWS = 8, 6
 WATER_BRIGHTNESS = [0.85, 0.95, 1.05, 1.15]  # 4-frame ramp
@@ -56,6 +71,36 @@ def _crop_cell(sheet, cols, rows, col, row):
     box = (col * w, row * h, (col + 1) * w, (row + 1) * h)
     return sheet.crop(box).convert("RGB").resize(
         (REGION_W * SS, REGION_H * SS), Image.LANCZOS)
+
+
+def _average(images):
+    """Per-pixel mean of several equal-size RGB images (#233): blends grass crops
+    into one even field. Deterministic (integer-averaged via PIL)."""
+    acc = images[0]
+    for i in range(1, len(images)):
+        acc = Image.blend(acc, images[i], 1.0 / (i + 1))
+    return acc
+
+
+def _soften(rgb):
+    """Tier 2 (#233): flatten a ground crop's contrast + saturation so its high-
+    frequency 'signature' features stop reading as a stamp when tiled. Purely a
+    tone operation on the RGB crop; the diamond alpha is applied later."""
+    out = ImageEnhance.Contrast(rgb).enhance(GRASS_CONTRAST)
+    return ImageEnhance.Color(out).enhance(GRASS_SATURATION)
+
+
+def _harden_silhouette(atlas):
+    """Tier 2 (#233): threshold the atlas alpha so every diamond is fully opaque
+    up to a crisp edge. A soft (anti-aliased) diamond edge leaves a semi-
+    transparent band where two tiles meet, and the dark void behind the layer
+    shows through it as a grid of seams. An inclusive threshold grows each diamond
+    by a hair so neighbours overlap at the shared edge -> full coverage, no seam.
+    Only the diamond SILHOUETTE hardens; the grass<->dirt blend lives in the RGB
+    (via the corner selector), so soft interior transitions are untouched."""
+    r, g, b, a = atlas.split()
+    a = a.point(lambda v: 255 if v >= ALPHA_THRESHOLD else 0)
+    return Image.merge("RGBA", (r, g, b, a))
 
 
 def _diamond_points():
@@ -144,8 +189,10 @@ def build_atlas(sources_dir):
     grass_sheet = Image.open(os.path.join(sources_dir, "grass_dirt.png"))
     water_sheet = Image.open(os.path.join(sources_dir, "water.png"))
 
-    grass_ss = _crop_cell(grass_sheet, GRASS_DIRT_COLS, GRASS_DIRT_ROWS, *GRASS_CELL)
-    dirt_ss = _crop_cell(grass_sheet, GRASS_DIRT_COLS, GRASS_DIRT_ROWS, *DIRT_CELL)
+    grass_crops = [_crop_cell(grass_sheet, GRASS_DIRT_COLS, GRASS_DIRT_ROWS, c, r)
+                   for (c, r) in GRASS_CELLS]
+    grass_ss = _soften(_average(grass_crops))
+    dirt_ss = _soften(_crop_cell(grass_sheet, GRASS_DIRT_COLS, GRASS_DIRT_ROWS, *DIRT_CELL))
     water_ss = _pick_water_cell(water_sheet)
     dia_ss = _diamond_alpha()
 
@@ -169,7 +216,7 @@ def build_atlas(sources_dir):
     ramp_tile = _solid_tile(RAMP_COLOR, dia_ss)
     big.alpha_composite(ramp_tile, (0, 5 * REGION_H * SS))
 
-    return big.resize((ATLAS_W, ATLAS_H), Image.LANCZOS)
+    return _harden_silhouette(big.resize((ATLAS_W, ATLAS_H), Image.LANCZOS))
 
 
 def main():
