@@ -44,6 +44,13 @@ The engine foundation is built and merged on `main`. What runs today:
 - **Continuous unit movement (V3)** — flow-field group movement, formation assignment,
   A* single-unit paths, marquee multi-select, and steering/separation, exercised by the
   `unit_debug` dev hook. (Ramp-traversal polish is the one open follow-up.)
+- **Seamless HD terrain** — per-cell tile variation + a **world-space relief/tint shader**
+  (warm-lit / cool-shadow, sampled in world space so there's no tile-pitch frequency)
+  make a solid-grass field read as one continuous surface with no visible grid, scattered
+  with procedural doodads (rocks/bushes/flowers/pebbles).
+- **Cliff walls** — raised elevation tiers render real cliff faces with a sunlit lip and a
+  soft ground cast shadow (`CliffRenderer`), so a plateau reads as solid height instead of
+  a floating diamond; ramps read as breaks in the wall.
 - **Day/night + directional lighting** — an ambient day/night cycle, a directional sun
   light with a normal-mapped terrain atlas, and per-tier elevation shading (Stories
   L1–L4). See `docs/LIGHTING.md`.
@@ -55,15 +62,22 @@ Those are scoped as gap-filling epics **#133–#142** and are not implemented on
 
 ## Screenshots
 
-> Rendered from the bundled showcase map (`assets/maps/showcase.json`).
+> Rendered from the bundled showcase map (`assets/maps/showcase.json`) via
+> `tools/render_showcase.gd`. The seamless terrain, cliffs and doodads are real
+> engine output; the golden-hour grade + campfire glow are a screenshot post-pass.
 
-![Isometric HD terrain — a multi-tier grass map with an animated water lake and a raised plateau reached by a ramp, drawn with dual-grid autotiling.](docs/media/terrain.png)
-*HD isometric terrain: dual-grid autotiled grass, an animated water lake, and a raised
-elevation tier connected by a ramp.*
+![Golden-hour hero shot — a raised grass plateau with a shadowed rock cliff, a soft ground shadow, a campfire glowing at its base, and seamless lush terrain scattered with doodads.](docs/media/hero.png)
+*The engine at golden hour: seamless HD terrain (no visible tile grid), a real cliff
+with a cast shadow, scattered doodads, and localised firelight.*
 
-![The same map under the day/night cycle — warm directional sun light raking across the diamonds with per-tier elevation shading.](docs/media/daynight.png)
-*Day/night lighting: an ambient cycle plus a directional sun and normal-mapped relief,
-with higher tiers catching more light.*
+![Wide establishing shot of the showcase world — an animated water lake, a raised plateau ringed by cliff walls, and a doodad-strewn meadow under a warm sky.](docs/media/terrain.png)
+*Seamless multi-tier terrain: per-cell tile variation + a world-space relief/tint shader
+kill the repeating grid, with an animated lake, a cliff-walled plateau, and scattered
+rocks/bushes/flowers.*
+
+![Close-up of the plateau's cliff face — a shadowed earthen wall with a sunlit top lip and a soft cast shadow grounding it on the meadow below.](docs/media/cliffs.png)
+*True verticality: elevation tiers render real cliff walls with a sunlit lip and a soft
+ground shadow, so raised terrain reads as solid height, not a floating diamond.*
 
 ![The in-game dev menu overlay — Escape pause screen with Editor/Play mode toggles and the live tileset switcher sidebar.](docs/media/dev_menu.png)
 *The Esc dev menu: Editor/Play mode switching and a live tileset swapper.*

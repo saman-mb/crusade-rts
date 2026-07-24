@@ -14,10 +14,12 @@ vendors assets whose licenses permit redistribution — **CC0 / public domain**
   source sheets in `assets/tilesets/sources/` by `tools/pack_terrain_atlas.py`.
 - **Note:** CC0 requires no attribution; this entry is a courtesy acknowledgement.
 
-### Doodad decor — procedurally generated (project-owned)
+### Doodad decor, campfire & light cookies — procedurally generated (project-owned)
 - **Author:** Crusade project (generated, not third-party).
-- **Source:** `assets/doodads/doodads.png`, drawn deterministically by
-  `tools/gen_doodads.py` (rocks, bushes, grass tufts, flowers, pebbles).
+- **Source:** `assets/doodads/doodads.png` (rocks, bushes, grass tufts, flowers,
+  pebbles) and `assets/doodads/campfire.png` (fire-pit + logs + flame), drawn
+  deterministically by `tools/gen_doodads.py`; `assets/lights/point_light.png`
+  is a generated soft radial cookie used for cliff cast-shadows and showcase glow.
 - **License:** covered by the repository's own MIT license — no third-party terms.
-- **Note:** listed here only to make its provenance explicit; there is no external
+- **Note:** listed here only to make provenance explicit; there is no external
   pack or attribution obligation.

@@ -46,8 +46,12 @@ FEATHER_PX = 3.0            # grass<->dirt seam softness, in final-res pixels
 # as texture, not a recognizable stamp -- the variation system (#232) then breaks
 # up what little repetition remains.
 ALPHA_THRESHOLD = 96        # 0..255; alpha >= this -> fully opaque, else fully clear
-GRASS_CONTRAST = 0.70       # <1 flattens the grass tuft contrast toward its mean
-GRASS_SATURATION = 1.02     # slight boost so the averaged grass reads green, not muddy
+GRASS_CONTRAST = 0.72       # <1 flattens the grass tuft contrast toward its mean
+GRASS_SATURATION = 1.28     # boost so the averaged grass reads lush green, not muddy
+# De-mud tint (#233 art pass): multiply the softened grass toward green and lift
+# shadows toward a cool green-grey instead of brown, per the lead-artist palette
+# (lit ~#6E8B45, shadow greener/cooler). Applied after contrast/saturation.
+GRASS_TINT = (0.92, 1.06, 0.82)   # R,G,B multipliers -> push green, cut red/blue
 
 # --- Source sheet cell selection (in source-cell units) ---
 GRASS_DIRT_COLS, GRASS_DIRT_ROWS = 4, 7
@@ -83,11 +87,17 @@ def _average(images):
 
 
 def _soften(rgb):
-    """Tier 2 (#233): flatten a ground crop's contrast + saturation so its high-
-    frequency 'signature' features stop reading as a stamp when tiled. Purely a
+    """Tier 2 (#233): flatten a ground crop's contrast, then push it lush-green
+    (saturation + a green colour balance) so it stops reading as muddy olive and
+    its high-frequency 'signature' stops reading as a stamp when tiled. Purely a
     tone operation on the RGB crop; the diamond alpha is applied later."""
     out = ImageEnhance.Contrast(rgb).enhance(GRASS_CONTRAST)
-    return ImageEnhance.Color(out).enhance(GRASS_SATURATION)
+    out = ImageEnhance.Color(out).enhance(GRASS_SATURATION)
+    r, g, b = out.split()
+    r = r.point(lambda v: min(255, int(v * GRASS_TINT[0])))
+    g = g.point(lambda v: min(255, int(v * GRASS_TINT[1])))
+    b = b.point(lambda v: min(255, int(v * GRASS_TINT[2])))
+    return Image.merge("RGB", (r, g, b))
 
 
 def _harden_silhouette(atlas):
