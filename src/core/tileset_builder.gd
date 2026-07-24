@@ -69,6 +69,12 @@ static func build_terrain_tileset(texture: Texture2D, normal: Texture2D = null) 
 		src.get_tile_data(coord, 0).set_custom_data(TileSetConstants.WALKABLE_LAYER, TileSetConstants.coord_walkable(coord))
 		src.get_tile_data(coord, 0).set_custom_data(TileSetConstants.RAMP_LAYER, TileSetConstants.coord_ramp(coord))
 
+	# Per-cell variation (#232): build the flip/tint alternative_tiles on the
+	# interior grass coord so TerrainVariation can hand each solid-grass cell a
+	# different variant. Done after the base tile exists (created in the loop
+	# above) and BEFORE water so the source's tile set is complete in one place.
+	configure_tile_variants(src, TileSetConstants.interior_grass_coord(), TileSetConstants.GRASS_VARIANTS)
+
 	# Water lives at its own row (WATER_ANIM_COORDS) so it never collides with a
 	# LOOKUP coord; create it separately and wire up its animation.
 	var water := TileSetConstants.WATER_ANIM_COORDS
@@ -108,6 +114,29 @@ static func build_default_terrain_tileset() -> TileSet:
 	var normal := load(TileSetConstants.NORMAL_ATLAS_PATH) as Texture2D
 	return build_terrain_tileset(diffuse, normal)
 
+
+## Builds the flip/tint alternative_tiles for one atlas coord (#232). Creates
+## alternatives 1..count-1 (index 0 is the base tile) with the id == index, so the
+## runtime picker's [0, count) index maps straight onto the alternative_tile id.
+## Each alternative carries the same texture_origin AND the same walkable/ramp
+## custom data as the base -- CRITICAL: every alternative gets its OWN TileData
+## (custom data defaults to false), and navigation reads walkability through
+## get_cell_tile_data(cell) on the cell's CURRENT alternative, so a varied grass
+## cell would read as a non-walkable hole and break pathing without this copy.
+static func configure_tile_variants(src: TileSetAtlasSource, coord: Vector2i, count: int) -> void:
+	for index in range(1, count):
+		src.create_alternative_tile(coord, index)
+		var td: TileData = src.get_tile_data(coord, index)
+		var t: Dictionary = TileSetConstants.variant_transform(index)
+		var flip_h: bool = t["flip_h"]
+		var flip_v: bool = t["flip_v"]
+		var modulate: Color = t["modulate"]
+		td.flip_h = flip_h
+		td.flip_v = flip_v
+		td.modulate = modulate
+		td.texture_origin = TileSetConstants.TEXTURE_ORIGIN
+		td.set_custom_data(TileSetConstants.WALKABLE_LAYER, TileSetConstants.coord_walkable(coord))
+		td.set_custom_data(TileSetConstants.RAMP_LAYER, TileSetConstants.coord_ramp(coord))
 
 ## Configures the multi-frame water animation on an existing atlas tile: frame
 ## count, column layout, per-frame durations, separation, and randomized start
