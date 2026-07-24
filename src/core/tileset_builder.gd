@@ -69,11 +69,28 @@ static func build_terrain_tileset(texture: Texture2D, normal: Texture2D = null) 
 		src.get_tile_data(coord, 0).set_custom_data(TileSetConstants.WALKABLE_LAYER, TileSetConstants.coord_walkable(coord))
 		src.get_tile_data(coord, 0).set_custom_data(TileSetConstants.RAMP_LAYER, TileSetConstants.coord_ramp(coord))
 
-	# Per-cell variation (#232): build the flip/tint alternative_tiles on the
-	# interior grass coord so TerrainVariation can hand each solid-grass cell a
-	# different variant. Done after the base tile exists (created in the loop
-	# above) and BEFORE water so the source's tile set is complete in one place.
+	# LEGACY flip alternatives on the interior grass coord: existing saves carry
+	# alt 1..3 on (3,3) and MapValidator drops any cell whose alt the source
+	# lacks, so these must keep existing even though the variation pass now
+	# assigns positional window tiles (below) instead.
 	configure_tile_variants(src, TileSetConstants.interior_grass_coord(), TileSetConstants.GRASS_VARIANTS)
+
+	# Positional mega-tile windows: 32 grass + 32 water crops of the seamless
+	# mega textures (see TileSetConstants / pack_terrain_atlas.py). Each carries
+	# the same custom data as its material -- grass walkable, water NOT -- via
+	# the shared coord_walkable/coord_ramp predicates. No alternatives: a flip
+	# would break the edge continuity that is the point of the windows.
+	var window_rows: Array[int] = [TileSetConstants.GRASS_WINDOW_ROW0, TileSetConstants.WATER_WINDOW_ROW0]
+	for row0 in window_rows:
+		for i in range(32):
+			var wcoord := Vector2i(i % 4, row0 + i / 4)
+			if seen.has(wcoord):
+				continue
+			seen[wcoord] = true
+			src.create_tile(wcoord)
+			src.get_tile_data(wcoord, 0).texture_origin = TileSetConstants.TEXTURE_ORIGIN
+			src.get_tile_data(wcoord, 0).set_custom_data(TileSetConstants.WALKABLE_LAYER, TileSetConstants.coord_walkable(wcoord))
+			src.get_tile_data(wcoord, 0).set_custom_data(TileSetConstants.RAMP_LAYER, TileSetConstants.coord_ramp(wcoord))
 
 	# Water lives at its own row (WATER_ANIM_COORDS) so it never collides with a
 	# LOOKUP coord; create it separately and wire up its animation.

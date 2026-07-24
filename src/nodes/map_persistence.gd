@@ -112,6 +112,7 @@ func _apply_terrain_variation() -> void:
 		if layer != null:
 			TerrainVariation.apply(layer)
 	CliffRenderer.populate(_map_system)
+	ShoreRenderer.populate(_map_system)
 	DoodadPlacer.populate(_map_system)
 
 

@@ -44,13 +44,18 @@ The engine foundation is built and merged on `main`. What runs today:
 - **Continuous unit movement (V3)** — flow-field group movement, formation assignment,
   A* single-unit paths, marquee multi-select, and steering/separation, exercised by the
   `unit_debug` dev hook. (Ramp-traversal polish is the one open follow-up.)
-- **Seamless HD terrain** — per-cell tile variation + a **world-space relief/tint shader**
-  (warm-lit / cool-shadow, sampled in world space so there's no tile-pitch frequency)
-  make a solid-grass field read as one continuous surface with no visible grid, scattered
-  with procedural doodads (rocks/bushes/flowers/pebbles).
-- **Cliff walls** — raised elevation tiers render real cliff faces with a sunlit lip and a
-  soft ground cast shadow (`CliffRenderer`), so a plateau reads as solid height instead of
-  a floating diamond; ramps read as breaks in the wall.
+- **Seamless HD terrain** — grass and water are **positional mega-tiles**: 32 diamond crops
+  of one large torus-periodic texture, cut at the exact screen offsets of the cells they
+  land on, so the artwork flows continuously across every tile edge (SC1's trick). The tile
+  grid is gone — no repeat, no seam — over a world-space relief/tint shader (warm-lit /
+  cool-shadow) with SC1-style mid-frequency grit and earth showing through.
+- **Cliff walls & trees** — raised tiers render real rocky cliff faces (strata, cracks,
+  sunlit lip, overhanging tufts, a continuous ground cast shadow, merged tall faces for
+  multi-tier mesas; `CliffRenderer` + `gen_cliffs.py`) with a **shoreline transition** at
+  the water's edge (`ShoreRenderer`), and grove-clustered **canopy trees** with baked
+  golden-hour shadows (`gen_trees.py`) — so the map reads as a designed, inhabited world.
+- **Scattered doodads** — rocks, bushes, grass tufts, flowers, pebbles, deterministically
+  placed and Y-sorted (`DoodadPlacer` / `DoodadScatter`).
 - **Day/night + directional lighting** — an ambient day/night cycle, a directional sun
   light with a normal-mapped terrain atlas, and per-tier elevation shading (Stories
   L1–L4). See `docs/LIGHTING.md`.
@@ -67,17 +72,18 @@ Those are scoped as gap-filling epics **#133–#142** and are not implemented on
 > engine output; the golden-hour grade + campfire glow are a screenshot post-pass.
 
 ![Golden-hour hero shot — a raised grass plateau with a shadowed rock cliff, a soft ground shadow, a campfire glowing at its base, and seamless lush terrain scattered with doodads.](docs/media/hero.png)
-*The engine at golden hour: seamless HD terrain (no visible tile grid), a real cliff
-with a cast shadow, scattered doodads, and localised firelight.*
+*The engine at golden hour: seamless mega-tile terrain (no tile grid), a rock cliff with
+a continuous cast shadow, grove-clustered canopy trees, and localised firelight.*
 
 ![Wide establishing shot of the showcase world — an animated water lake, a raised plateau ringed by cliff walls, and a doodad-strewn meadow under a warm sky.](docs/media/terrain.png)
-*Seamless multi-tier terrain: per-cell tile variation + a world-space relief/tint shader
-kill the repeating grid, with an animated lake, a cliff-walled plateau, and scattered
-rocks/bushes/flowers.*
+*Seamless multi-tier terrain: positional mega-tiles kill the repeating grid entirely, over
+SC1-style gritty ground with earth showing through — a lake with a shoreline transition, a
+two-tier cliff-walled plateau, groves of trees, and scattered doodads.*
 
 ![Close-up of the plateau's cliff face — a shadowed earthen wall with a sunlit top lip and a soft cast shadow grounding it on the meadow below.](docs/media/cliffs.png)
-*True verticality: elevation tiers render real cliff walls with a sunlit lip and a soft
-ground shadow, so raised terrain reads as solid height, not a floating diamond.*
+*True verticality: elevation tiers render real rocky cliff walls (strata, cracks, sunlit
+lip, hanging tufts) with a continuous ground shadow and a dirt ramp breaking the wall, so
+raised terrain reads as solid height.*
 
 ![The in-game dev menu overlay — Escape pause screen with Editor/Play mode toggles and the live tileset switcher sidebar.](docs/media/dev_menu.png)
 *The Esc dev menu: Editor/Play mode switching and a live tileset swapper.*
@@ -186,8 +192,10 @@ See `docs/TILESET_ATLAS.md` for the full atlas layout.
 
 ## Terrain art & the atlas packer
 
-The terrain atlas at `assets/tilesets/terrain_atlas.png` is **real CC0 art**, not a
-placeholder. It is composited deterministically from the vendored CC0 source sheets in
+The terrain atlas at `assets/tilesets/terrain_atlas.png` carries the 32 grass + 32 water
+**positional mega-tile windows** (crops of one seamless torus-periodic texture built by
+`tools/pack_terrain_atlas.py`) plus the dual-grid transition tiles composited from **real
+CC0 art**. It is composited deterministically from the vendored CC0 source sheets in
 `assets/tilesets/sources/` (Screaming Brain Studios, "1000+ Isometric Floor Tiles",
 CC0) by `tools/pack_terrain_atlas.py`, which blends grass over dirt through the exact
 dual-grid corner-triangle geometry and builds the animated water strip. The interior grass

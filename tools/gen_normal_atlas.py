@@ -33,7 +33,7 @@ from PIL import Image
 
 # --- Layout constants (mirror src/core/tileset_constants.gd) ---
 REGION_W, REGION_H = 128, 64
-ATLAS_W, ATLAS_H = 512, 384
+ATLAS_W, ATLAS_H = 512, 1408
 COLS, ROWS = ATLAS_W // REGION_W, ATLAS_H // REGION_H   # 4 x 6
 
 # --- Defaults ---
@@ -103,6 +103,10 @@ def build_normal_atlas(diffuse, strength: float = DEFAULT_STRENGTH,
             y0, x0 = row * REGION_H, col * REGION_W
             y1, x1 = y0 + REGION_H, x0 + REGION_W
             reg_alpha = alpha[y0:y1, x0:x1]
+            if row >= 6:
+                continue  # mega-tile window rows: neutral by design -- a per-tile
+                          # gradient would crease the seamless windows at their
+                          # edges; their relief comes from the world-space shader
             if reg_alpha.max() < alpha_threshold:
                 continue  # empty region: leave neutral
             out[y0:y1, x0:x1] = _region_normals(

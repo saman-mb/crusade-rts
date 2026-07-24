@@ -19,7 +19,9 @@ vendors assets whose licenses permit redistribution — **CC0 / public domain**
 - **Source:** `assets/doodads/doodads.png` (rocks, bushes, grass tufts, flowers,
   pebbles) and `assets/doodads/campfire.png` (fire-pit + logs + flame), drawn
   deterministically by `tools/gen_doodads.py`; `assets/lights/point_light.png`
-  is a generated soft radial cookie used for cliff cast-shadows and showcase glow.
+  is a generated soft radial cookie used for cliff cast-shadows and showcase glow;
+  `assets/cliffs/cliffs.png` (rocky cliff faces, `tools/gen_cliffs.py`) and
+  `assets/doodads/trees.png` (canopy trees, `tools/gen_trees.py`) are likewise generated.
 - **License:** covered by the repository's own MIT license — no third-party terms.
 - **Note:** listed here only to make provenance explicit; there is no external
   pack or attribution obligation.
