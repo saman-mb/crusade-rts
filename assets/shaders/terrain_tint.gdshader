@@ -15,12 +15,16 @@ uniform float hue_amp : hint_range(0.0, 0.2) = 0.045;    // warm/cool swing
 uniform vec3 warm = vec3(1.03, 1.0, 0.93);
 uniform vec3 cool = vec3(0.95, 1.0, 1.04);
 // --- world-space relief lighting (fake directional sun -> warm-lit / cool-shadow) ---
+// Lead-artist contrast rebalance: shadow end multiplies toward a DIM cool tone
+// (~#4A5570 at 0.45 value) while highlights push a bright warm-white -- roughly a
+// 2.7:1 light ratio, where the flat look was ~1.5:1. Contrast lives HERE (in the
+// lighting), not in the albedo, which stays within a narrow luminance band.
 uniform float relief_slope = 26.0;                        // how steep the noise "hills" tilt normals
 uniform vec3 sun_dir = vec3(-0.45, -0.35, 0.82);         // screen-space; sun from upper-left, +z up
-uniform vec3 shadow_tone = vec3(0.46, 0.54, 0.76);       // cool + DIM: real shadow low-notes
-uniform vec3 highlight_tone = vec3(1.30, 1.12, 0.80);    // bright warm-white sun-side
+uniform vec3 shadow_tone = vec3(0.34, 0.43, 0.26);       // deep JUNGLE-green shadow (SC1 anchor #4a5a28)
+uniform vec3 highlight_tone = vec3(1.30, 1.18, 0.82);    // warm ochre sun side (SC1 anchor #b3a34e)
 uniform vec3 rim_color = vec3(1.0, 0.81, 0.54);          // additive warm rim on the brightest facets
-uniform float rim_strength : hint_range(0.0, 0.5) = 0.18;
+uniform float rim_strength : hint_range(0.0, 0.5) = 0.16;
 
 varying vec2 v_world;
 
@@ -50,9 +54,18 @@ float fbm(vec2 p) {
 }
 
 // Continuous world-space "ground height": macro undulation + meso grain + micro
-// tactile detail, periods in world px (~896 / ~160 / ~48). No tile-pitch frequency.
+// tactile detail. No tile-pitch frequency. The macro octave is sampled in a
+// frame STRETCHED 2:1 along the NW->SE sun axis at a long ~1200px period, so the
+// shading reads as raking light across long swells -- small round macro spots
+// read as leopard-print dirt blotches (lead-artist note), long swells read as
+// terrain under a low sun.
 float height(vec2 w) {
-	return 0.55 * vnoise(w / 896.0) + 0.30 * vnoise(w / 160.0) + 0.15 * vnoise(w / 48.0);
+	vec2 axis = normalize(vec2(2.0, 1.0));                 // NW->SE sun sweep on screen
+	vec2 perp = vec2(-axis.y, axis.x);
+	vec2 sw = vec2(dot(w, axis) * 0.4, dot(w, perp));      // 2.5:1 stretch along the axis
+	// Long raking swells + a whisper of fine tooth. NO mid octave: mid-frequency
+	// blobs at high amplitude read as camo mottle, not terrain (lead-artist note).
+	return 0.85 * vnoise(sw / 1500.0) + 0.15 * vnoise(w / 72.0);
 }
 
 void fragment() {

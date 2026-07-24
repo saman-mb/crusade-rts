@@ -28,6 +28,30 @@ static func scatter(cells: Array[Vector2i], density_per_mille: int) -> Array[Dic
 		out.append({"cell": cell, "type": type_row, "variant": variant, "offset": offset})
 	return out
 
+## Clustered scatter for TREES (#234 art pass): like scatter(), but gated by a
+## low-frequency "grove" mask so trees appear in clumps of a few with open
+## meadow between (never even-spaced -- lead-artist placement rule). `salt`
+## separates the tree stream from the doodad stream. Entry shape:
+## { "cell": Vector2i, "variant": int, "offset": Vector2 }.
+static func scatter_clustered(cells: Array[Vector2i], density_per_mille: int, variants: int, salt: int) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for cell in cells:
+		# Grove gate: cells share a gate value over 4x4 blocks (arithmetic >> 2
+		# floor-divides negatives correctly), so passing blocks form clumps.
+		var gate := _hash(cell.x >> 2, cell.y >> 2, salt) % 1000
+		if gate >= 320:
+			continue
+		if _hash(cell.x, cell.y, salt + 1) % 1000 >= density_per_mille:
+			continue
+		var variant := _hash(cell.x, cell.y, salt + 2) % variants
+		var jx := _hash(cell.x, cell.y, salt + 3) % 1000
+		var jy := _hash(cell.x, cell.y, salt + 4) % 1000
+		var offset := Vector2(
+			(jx / 1000.0 - 0.5) * MapConstants.TILE_SIZE.x * 0.5,
+			(jy / 1000.0 - 0.5) * MapConstants.TILE_SIZE.y * 0.5)
+		out.append({"cell": cell, "variant": variant, "offset": offset})
+	return out
+
 ## Non-negative 31-bit hash of a cell + a salt (so the placement decision, type,
 ## variant and the two jitter axes each draw from an independent stream). Masks to
 ## 31 bits after the first combine so later shifts stay logical for negative cells.

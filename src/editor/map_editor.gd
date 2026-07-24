@@ -358,6 +358,15 @@ func _eyedrop_at_mouse() -> void:
 	var a := _active_layer.get_cell_atlas_coords(cell)
 	# Sample the alternative_tile too (#109) so painting re-lays the exact tile variant.
 	var alt: int = _active_layer.get_cell_alternative_tile(cell)
+	# Positional mega-tile windows are only correct at their own cell position --
+	# normalize a sampled window back to the canonical paint tile so the brush
+	# lays coherent tiles anywhere (the load-time pass re-derives windows).
+	if TileSetConstants.is_grass_window_coord(a):
+		a = TileSetConstants.interior_grass_coord()
+		alt = 0
+	elif TileSetConstants.is_water_window_coord(a):
+		a = TileSetConstants.WATER_ANIM_COORDS
+		alt = 0
 	if s != -1:
 		_source_id = s
 		_atlas_coords = a

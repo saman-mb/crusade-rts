@@ -30,13 +30,39 @@ It writes assets/tilesets/terrain_atlas.png relative to the repo root.
 """
 
 import os
+import random
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
 # --- Layout constants (mirror tileset_constants.gd) ---
 REGION_W, REGION_H = 128, 64
-ATLAS_W, ATLAS_H = 512, 384
+ATLAS_W, ATLAS_H = 512, 1408
 SS = 4                      # supersample factor for anti-aliasing
+
+# --- Positional mega-tile windows (the REAL seam killer) -----------------------
+# A field of ONE repeated tile bitmap always reads as a grid, however soft its
+# edges. SC1's actual technique: make the artwork CONTINUOUS across cells. One
+# large SEAMLESS (torus-periodic) texture is cut into 128x64 diamond "window"
+# crops at the exact screen offsets of the cells they land on, and the runtime
+# assigns each cell the window for its position -- the texture then flows across
+# every tile edge, and the repeat period becomes the whole mega texture.
+#
+# Indexing: screen-x depends only on p = x - y and screen-y only on q = x + y
+# (cell (x,y)'s bounding-box top-left sits at (64p, 32q)). With window class
+# (a, b) = (p mod 8, q mod 8), two cells share a class iff their screen offset is
+# a multiple of (512, 256) = the mega texture's period, so one crop is correct
+# everywhere its class appears -- and adjacent cells are adjacent crops of the
+# same image, so shared edges match EXACTLY. p and q always share parity, so only
+# the 32 same-parity classes occur; window index = a*4 + b//2 (0..31), stored as
+# 8 atlas rows of 4. Grass windows at rows 6..13, water windows at rows 14..21.
+# Water windows are STATIC on purpose: the old desynced brightness frames put
+# neighbouring tiles on different frames, which re-created a checkerboard.
+MEGA_W, MEGA_H = 512, 256   # mega texture size == the window period, world px
+WINDOW_N = 8                # window classes per axis (p mod 8, q mod 8)
+GRASS_WINDOW_ROW0 = 6       # first atlas row of the 32 grass windows
+WATER_WINDOW_ROW0 = 14      # first atlas row of the 32 water windows
+MEGA_SEED = 20260724        # fixed seed -> fully deterministic mega textures
 FEATHER_PX = 3.0            # grass<->dirt seam softness, in final-res pixels
 # Tier 2 terrain-realism (#233): the diamond silhouette is hardened at the very
 # end (ALPHA_THRESHOLD) so neighbouring diamonds meet at full coverage instead of
@@ -178,6 +204,39 @@ def _solid_tile(color, dia_ss):
     return tile
 
 
+def _ramp_tile(dia_ss):
+    """Worn-dirt ramp diamond (lead-artist spec): a #7D6A52 -> #5E4C3A gradient
+    down-slope with scattered pebbles and faint wear lines, replacing the flat
+    tan placeholder that read as an orange orphan under the warm grade."""
+    w, h = REGION_W * SS, REGION_H * SS
+    top = (0x7D, 0x6A, 0x52)
+    bot = (0x5E, 0x4C, 0x3A)
+    img = Image.new("RGB", (w, h))
+    px = img.load()
+    for y in range(h):
+        t = y / (h - 1)
+        c = tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3))
+        for x in range(w):
+            px[x, y] = c
+    d = ImageDraw.Draw(img)
+    prng = random.Random(20260726)
+    for _i in range(26):
+        x = prng.uniform(w * 0.2, w * 0.8)
+        y = prng.uniform(h * 0.2, h * 0.8)
+        r = prng.uniform(0.8, 2.2) * SS
+        g = prng.randint(120, 160)
+        d.ellipse([x - r, y - r * 0.6, x + r, y + r * 0.6], fill=(g, g - 8, g - 18))
+    for _i in range(8):
+        y = prng.uniform(h * 0.15, h * 0.9)
+        x0 = prng.uniform(0, w * 0.5)
+        ln = prng.uniform(w * 0.2, w * 0.5)
+        d.line([(x0, y), (x0 + ln, y + prng.uniform(-2, 2) * SS)],
+               fill=(0x52, 0x42, 0x32), width=max(1, SS // 2))
+    tile = img.convert("RGBA")
+    tile.putalpha(dia_ss)
+    return tile
+
+
 def _pick_water_cell(water_sheet):
     """Deterministically pick the most water-dominant cell (max mean B - R)."""
     best, best_score = None, None
@@ -195,15 +254,222 @@ def _pick_water_cell(water_sheet):
     return best
 
 
+# --- Mega-texture generation (torus-periodic => window crops share edges) ------
+
+def _torus_noise(w, h, cells_x, cells_y, rng):
+    """Smooth value noise, PERIODIC in both axes (lattice indices wrap), in [0,1].
+    Periodicity is what makes every window crop's edge match its neighbour's."""
+    lattice = rng.random((cells_y, cells_x))
+    ys = np.linspace(0.0, cells_y, h, endpoint=False)
+    xs = np.linspace(0.0, cells_x, w, endpoint=False)
+    y0 = np.floor(ys).astype(int)
+    x0 = np.floor(xs).astype(int)
+    fy = (ys - y0)[:, None]
+    fx = (xs - x0)[None, :]
+    fy = fy * fy * (3.0 - 2.0 * fy)
+    fx = fx * fx * (3.0 - 2.0 * fx)
+    y1 = (y0 + 1) % cells_y
+    x1 = (x0 + 1) % cells_x
+    a = lattice[np.ix_(y0, x0)]
+    b = lattice[np.ix_(y0, x1)]
+    c = lattice[np.ix_(y1, x0)]
+    d = lattice[np.ix_(y1, x1)]
+    return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy
+
+
+def _hex(c):
+    return tuple(int(c[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def _lerp_rgb(c0, c1, t):
+    """t is an (h,w) array in [0,1]; returns an (h,w,3) uint8 array."""
+    out = np.empty(t.shape + (3,), dtype=np.float32)
+    for i in range(3):
+        out[..., i] = c0[i] * (1.0 - t) + c1[i] * t
+    return out
+
+
+def _gen_mega_grass(ss):
+    """Seamless grass mega texture at ss scale (MEGA_W*ss x MEGA_H*ss), RGB.
+
+    Lead-artist layer stack: fresh-green base; two octaves of warm<->cool hue
+    drift (value swing kept small -- contrast belongs to LIGHTING, not albedo);
+    lush/dry clump patches (dry = yellow-green, never brown); thousands of tiny
+    near-vertical blade strokes with lit tips; a whisper of dirt speckle. All
+    noise is torus-periodic and strokes are drawn 9-way wrapped, so the texture
+    tiles seamlessly -- which is exactly what makes the window crops seamless.
+    """
+    w, h = MEGA_W * ss, MEGA_H * ss
+    rng = np.random.default_rng(MEGA_SEED)
+    base = _hex("#5E7A3A")
+    warm = _hex("#6B8A42")
+    cool = _hex("#4F7038")
+    lush = _hex("#55763C")
+    dry = _hex("#7C8A44")
+
+    drift = 0.65 * _torus_noise(w, h, 2, 1, rng) + 0.35 * _torus_noise(w, h, 5, 3, rng)
+    rgb = _lerp_rgb(cool, warm, drift)
+    # Blend a touch of base back in so the drift never dominates.
+    for i in range(3):
+        rgb[..., i] = 0.55 * rgb[..., i] + 0.45 * base[i]
+
+    # Mid-band mottle (SC1 grit): HARD-edged posterized clumps 48-160px with
+    # strong local contrast -- the painterly mid frequencies SC1 lives in.
+    clump = _torus_noise(w, h, 12, 6, rng)
+    clump2 = _torus_noise(w, h, 26, 13, rng)
+    lush_m = np.clip((0.44 - clump) * 8.0, 0.0, 1.0) * 0.55
+    dry_m = np.clip((clump - 0.60) * 8.0, 0.0, 1.0) * 0.45
+    mid_m = np.clip((clump2 - 0.58) * 10.0, 0.0, 1.0) * 0.3
+    mid_dark = tuple(int(c * 0.78) for c in lush)
+    for i in range(3):
+        rgb[..., i] = rgb[..., i] * (1 - lush_m) + lush[i] * lush_m
+        rgb[..., i] = rgb[..., i] * (1 - dry_m) + dry[i] * dry_m
+        rgb[..., i] = rgb[..., i] * (1 - mid_m) + mid_dark[i] * mid_m
+    # Earth showing through: irregular dirt patches (~15% coverage) with a
+    # broken dark rim -- breaks the mono-green lawn into jungle floor.
+    dirtn = _torus_noise(w, h, 10, 6, rng)
+    dirt_m = np.clip((dirtn - 0.74) * 9.0, 0.0, 1.0)
+    rim_m = np.clip((dirtn - 0.70) * 9.0, 0.0, 1.0) - dirt_m
+    dirt_fill = (0x84, 0x74, 0x4E)
+    rim_fill = (0x5D, 0x4F, 0x33)
+    for i in range(3):
+        rgb[..., i] = rgb[..., i] * (1 - dirt_m * 0.55) + dirt_fill[i] * dirt_m * 0.55
+        rgb[..., i] = rgb[..., i] * (1 - rim_m * 0.3) + rim_fill[i] * rim_m * 0.3
+
+    img = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8), "RGB")
+    d = ImageDraw.Draw(img)
+    prng = random.Random(MEGA_SEED)
+    blade_base = _hex("#45602E")
+    blade_tip = _hex("#7E9C4C")
+    spark = _hex("#93AE5C")
+    dirt = _hex("#8A7448")
+    pebble = _hex("#9A9077")
+
+    def wrapped(draw_fn, x, y):
+        for dx in (-w, 0, w):
+            for dy in (-h, 0, h):
+                draw_fn(x + dx, y + dy)
+
+    n_blades = 6400
+    for _i in range(n_blades):
+        x = prng.uniform(0, w)
+        y = prng.uniform(0, h)
+        ln = prng.uniform(0.9, 3.0) * ss
+        lean = prng.uniform(-0.6, 0.6) * ss
+        t = prng.random()
+        # +30% stroke contrast (lead artist): darker bases, brighter tips.
+        lo = tuple(int(c * 0.82) for c in blade_base)
+        hi = tuple(min(255, int(c * 1.18)) for c in blade_tip)
+        col = tuple(int(lo[i] + (hi[i] - lo[i]) * t) for i in range(3))
+        if prng.random() < 0.02:
+            col = spark
+        wd = max(1, int(0.35 * ss))
+        wrapped(lambda px, py, c=col, L=ln, e=lean, W=wd:
+                d.line([(px, py), (px + e, py - L)], fill=c, width=W), x, y)
+
+    # Directional stroke layer: painterly dashes aligned +/-25 deg around the
+    # NW->SE sun axis (SC1 brushwork read).
+    import math as _m
+    for _i in range(600):
+        x = prng.uniform(0, w)
+        y = prng.uniform(0, h)
+        ang = _m.atan2(1.0, 2.0) + prng.uniform(-0.44, 0.44)
+        ln = prng.uniform(3.0, 10.0) * ss
+        dxs, dys = _m.cos(ang) * ln, _m.sin(ang) * ln
+        dark = prng.random() < 0.6
+        f = 0.92 if dark else 1.08
+        sc = tuple(max(0, min(255, int(c * f))) for c in base)
+        wrapped(lambda px, py, c=sc, DX=dxs, DY=dys:
+                d.line([(px, py), (px + DX, py + DY)], fill=c, width=max(1, int(0.5 * ss))), x, y)
+    for _i in range(420):
+        x = prng.uniform(0, w)
+        y = prng.uniform(0, h)
+        r = prng.uniform(0.3, 0.9) * ss
+        col = dirt if prng.random() < 0.8 else pebble
+        wrapped(lambda px, py, c=col, R=r:
+                d.ellipse([px - R, py - R * 0.6, px + R, py + R * 0.6], fill=c), x, y)
+    # Final green rebalance (lead-artist target swatches): ~8 deg greener hue,
+    # +8% saturation, so the field reads green-olive, never cooked yellow.
+    img = ImageEnhance.Color(img).enhance(1.08)
+    r2, g2, b2 = img.split()
+    r2 = r2.point(lambda v: int(v * 0.93))
+    g2 = g2.point(lambda v: min(255, int(v * 1.03)))
+    return Image.merge("RGB", (r2, g2, b2))
+
+
+def _gen_mega_water(ss):
+    """Seamless water mega texture at ss scale: deep-blue base, large soft depth
+    mottling, sparse short wave dashes. Torus-periodic like the grass mega."""
+    w, h = MEGA_W * ss, MEGA_H * ss
+    rng = np.random.default_rng(MEGA_SEED + 7)
+    base = _hex("#4A6B70")
+    deep = _hex("#2E4E56")
+    depth = 0.7 * _torus_noise(w, h, 3, 2, rng) + 0.3 * _torus_noise(w, h, 7, 4, rng)
+    rgb = _lerp_rgb(deep, base, np.clip(0.3 + depth * 0.85, 0.0, 1.0))
+    img = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8), "RGB")
+    d = ImageDraw.Draw(img)
+    prng = random.Random(MEGA_SEED + 7)
+    wave = _hex("#7FB8CC")
+    for _i in range(340):
+        x = prng.uniform(0, w)
+        y = prng.uniform(0, h)
+        ln = prng.uniform(1.5, 5.0) * ss
+        col = tuple(int(wave[i] * 0.55 + base[i] * 0.45) for i in range(3))
+        if prng.random() < 0.25:
+            col = wave
+        for dx in (-w, 0, w):
+            for dy in (-h, 0, h):
+                d.line([(x + dx, y + dy), (x + dx + ln, y + dy)], fill=col,
+                       width=max(1, int(0.3 * ss)))
+    return img
+
+
+def _window_tiles(mega_ss, ss):
+    """Yields (index, FINAL-res RGBA tile) for the 32 same-parity window crops.
+
+    Crop for class (a, b) is the 128x64 rect at (64a, 32b) of the mega, sampled
+    from a 3x3 tiling so crops (and their padding) wrap correctly. Each crop is
+    downsampled INDIVIDUALLY with true mega-texture padding around it -- if the
+    whole atlas were downsampled at once, the resampling kernel would bleed the
+    NEIGHBOURING ATLAS REGION's colours into each tile edge and re-draw a faint
+    seam; padding from the mega itself means the kernel sees exactly what the
+    adjacent map cell will contain, so edges stay continuous. The full rect's RGB
+    is kept under the diamond alpha (built-in colour bleed for edge filtering)."""
+    big = Image.new("RGB", (MEGA_W * ss * 3, MEGA_H * ss * 3))
+    for tx in range(3):
+        for ty in range(3):
+            big.paste(mega_ss, (tx * MEGA_W * ss, ty * MEGA_H * ss))
+    pad = 8  # final-res px of context on each side while downsampling
+    dia_final = _diamond_alpha().resize((REGION_W, REGION_H), Image.LANCZOS)
+    dia_final = dia_final.point(lambda v: 255 if v >= ALPHA_THRESHOLD else 0)
+    for a in range(WINDOW_N):
+        for b in range(WINDOW_N):
+            if (a + b) % 2 != 0:
+                continue
+            idx = a * 4 + b // 2
+            # +1 period so the padded crop never leaves the 3x3 tiling.
+            x0 = (a * (REGION_W // 2) + MEGA_W - pad) * ss
+            y0 = (b * (REGION_H // 2) + MEGA_H - pad) * ss
+            crop = big.crop((x0, y0,
+                             x0 + (REGION_W + 2 * pad) * ss,
+                             y0 + (REGION_H + 2 * pad) * ss))
+            small = crop.resize((REGION_W + 2 * pad, REGION_H + 2 * pad), Image.LANCZOS)
+            tile = small.crop((pad, pad, pad + REGION_W, pad + REGION_H)).convert("RGBA")
+            tile.putalpha(dia_final)
+            yield idx, tile
+
+
 def build_atlas(sources_dir):
     grass_sheet = Image.open(os.path.join(sources_dir, "grass_dirt.png"))
-    water_sheet = Image.open(os.path.join(sources_dir, "water.png"))
 
-    grass_crops = [_crop_cell(grass_sheet, GRASS_DIRT_COLS, GRASS_DIRT_ROWS, c, r)
-                   for (c, r) in GRASS_CELLS]
-    grass_ss = _soften(_average(grass_crops))
+    # The mega textures are the authoritative ground art. The dual-grid
+    # transition tiles blend the SAME mega grass (one crop) over CC0 dirt, so
+    # map borders stay coherent with the seamless interior field.
+    mega_grass_ss = _gen_mega_grass(SS)
+    mega_water_ss = _gen_mega_water(SS)
+    grass_ss = mega_grass_ss.crop((0, 0, REGION_W * SS, REGION_H * SS))
     dirt_ss = _soften(_crop_cell(grass_sheet, GRASS_DIRT_COLS, GRASS_DIRT_ROWS, *DIRT_CELL))
-    water_ss = _pick_water_cell(water_sheet)
+    water_ss = mega_water_ss.crop((0, 0, REGION_W * SS, REGION_H * SS))
     dia_ss = _diamond_alpha()
 
     big = Image.new("RGBA", (ATLAS_W * SS, ATLAS_H * SS), (0, 0, 0, 0))
@@ -217,16 +483,26 @@ def build_atlas(sources_dir):
             tile = _compose_tile(grass_ss, dirt_ss, dia_ss, mask)
             big.alpha_composite(tile, (col * REGION_W * SS, row * REGION_H * SS))
 
-    # Row 4: 4-frame animated water strip.
+    # Row 4: the legacy 4-frame water strip (kept so painted maps and the editor
+    # brush stay valid; the runtime remaps water cells onto the static windows).
     for col in range(4):
         tile = _water_tile(water_ss, dia_ss, WATER_BRIGHTNESS[col])
         big.alpha_composite(tile, (col * REGION_W * SS, 4 * REGION_H * SS))
 
-    # Row 5, col 0: placeholder ramp tile (#78).
-    ramp_tile = _solid_tile(RAMP_COLOR, dia_ss)
-    big.alpha_composite(ramp_tile, (0, 5 * REGION_H * SS))
+    # Row 5, col 0: worn-dirt ramp tile.
+    big.alpha_composite(_ramp_tile(dia_ss), (0, 5 * REGION_H * SS))
 
-    return _harden_silhouette(big.resize((ATLAS_W, ATLAS_H), Image.LANCZOS))
+    # Legacy rows are supersampled then downsampled together; the window tiles
+    # are downsampled INDIVIDUALLY (see _window_tiles) and pasted at final res
+    # afterwards, so no resampling kernel ever crosses two unrelated regions.
+    atlas = _harden_silhouette(big.resize((ATLAS_W, ATLAS_H), Image.LANCZOS))
+
+    # Rows 6..13: the 32 positional grass windows; rows 14..21: water windows.
+    for idx, tile in _window_tiles(mega_grass_ss, SS):
+        atlas.paste(tile, ((idx % 4) * REGION_W, (GRASS_WINDOW_ROW0 + idx // 4) * REGION_H))
+    for idx, tile in _window_tiles(mega_water_ss, SS):
+        atlas.paste(tile, ((idx % 4) * REGION_W, (WATER_WINDOW_ROW0 + idx // 4) * REGION_H))
+    return atlas
 
 
 def main():

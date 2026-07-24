@@ -15,11 +15,22 @@ static func serialize_layer(layer: TileMapLayer) -> Array:
 	var cells: Array = []
 	for c in layer.get_used_cells():
 		var atlas := layer.get_cell_atlas_coords(c)
+		var alt := layer.get_cell_alternative_tile(c)
+		# Normalize positional mega-tile windows back to the canonical painted
+		# tiles (interior grass / animated water, alt 0). Saved documents stay
+		# independent of the visual window scheme and readable by older builds;
+		# the load-time TerrainVariation pass re-derives the windows by position.
+		if TileSetConstants.is_grass_window_coord(atlas):
+			atlas = TileSetConstants.interior_grass_coord()
+			alt = 0
+		elif TileSetConstants.is_water_window_coord(atlas):
+			atlas = TileSetConstants.WATER_ANIM_COORDS
+			alt = 0
 		cells.append({
 			MapSchema.KEY_CELL_POS: [c.x, c.y],
 			MapSchema.KEY_CELL_SOURCE: layer.get_cell_source_id(c),
 			MapSchema.KEY_CELL_ATLAS: [atlas.x, atlas.y],
-			MapSchema.KEY_CELL_ALT: layer.get_cell_alternative_tile(c),
+			MapSchema.KEY_CELL_ALT: alt,
 		})
 	return cells
 
