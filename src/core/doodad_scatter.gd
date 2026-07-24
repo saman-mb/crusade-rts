@@ -1,0 +1,39 @@
+class_name DoodadScatter
+extends RefCounted
+## Deterministic decor placement over candidate cells (#234, Tier 3). Pure integer
+## logic: given the grass cells and a density, returns the doodads to spawn --
+## { cell, type, variant, offset } -- chosen from an integer hash of each cell, so
+## the layout is identical every run and survives reload WITHOUT persisting
+## anything (re-derived on load, exactly like TerrainVariation). No Node deps.
+##
+## The look (which sprite region, base anchor) is DoodadCatalog; the runtime
+## placement (Sprite2D under the tier's entity container) is DoodadPlacer; this
+## only decides WHERE a doodad goes and WHICH one.
+
+## Doodads for `cells` at `density_per_mille` (0..1000 = chance per candidate cell).
+## Each entry: { "cell": Vector2i, "type": int, "variant": int, "offset": Vector2 }
+## where offset is a deterministic sub-cell jitter so doodads are not dead-centre.
+static func scatter(cells: Array[Vector2i], density_per_mille: int) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for cell in cells:
+		if _hash(cell.x, cell.y, 1) % 1000 >= density_per_mille:
+			continue
+		var type_row := DoodadCatalog.weighted_type(_hash(cell.x, cell.y, 2))
+		var variant := _hash(cell.x, cell.y, 3) % DoodadCatalog.VARIANTS
+		var jx := _hash(cell.x, cell.y, 4) % 1000
+		var jy := _hash(cell.x, cell.y, 5) % 1000
+		var offset := Vector2(
+			(jx / 1000.0 - 0.5) * MapConstants.TILE_SIZE.x * 0.42,
+			(jy / 1000.0 - 0.5) * MapConstants.TILE_SIZE.y * 0.42)
+		out.append({"cell": cell, "type": type_row, "variant": variant, "offset": offset})
+	return out
+
+## Non-negative 31-bit hash of a cell + a salt (so the placement decision, type,
+## variant and the two jitter axes each draw from an independent stream). Masks to
+## 31 bits after the first combine so later shifts stay logical for negative cells.
+static func _hash(x: int, y: int, salt: int) -> int:
+	var h := (x * 73856093) ^ (y * 19349663) ^ (salt * 83492791)
+	h = h & 0x7fffffff
+	h = (h * 2654435761) & 0x7fffffff
+	h = (h ^ (h >> 13)) & 0x7fffffff
+	return h

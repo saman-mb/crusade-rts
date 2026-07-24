@@ -102,14 +102,16 @@ func _objects() -> TileMapLayer:
 	return _map_system.objects_layer
 
 
-## Applies the per-cell terrain variation pass (#232) to every elevation layer
-## after a map is populated, so solid-grass fields stop rendering as one repeated
-## tile on a visible grid. Deterministic (VariationPicker), so it is idempotent
-## across reloads and the chosen alternatives round-trip through F6 save.
+## Finalizes a freshly-loaded map's terrain look (#232, #234): per-cell tile
+## variation to break the grid, then scattered decor doodads. Both are
+## deterministic (VariationPicker / DoodadScatter), so they are idempotent across
+## reloads -- variation round-trips through F6 save; doodads are re-derived and
+## never persisted (DoodadPlacer clears the prior set first).
 func _apply_terrain_variation() -> void:
 	for layer in _layers():
 		if layer != null:
 			TerrainVariation.apply(layer)
+	DoodadPlacer.populate(_map_system)
 
 
 func _unhandled_input(event: InputEvent) -> void:
