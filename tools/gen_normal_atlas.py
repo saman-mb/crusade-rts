@@ -37,7 +37,11 @@ ATLAS_W, ATLAS_H = 512, 384
 COLS, ROWS = ATLAS_W // REGION_W, ATLAS_H // REGION_H   # 4 x 6
 
 # --- Defaults ---
-DEFAULT_STRENGTH = 2.5          # relief exaggeration; higher = steeper normals
+# Near-flat by design (#233 art pass): terrain relief now comes from the world-space
+# terrain_tint shader, not this per-tile normal map. A strong per-tile normal creates
+# a lit/shadow crease at every diamond edge -> a visible grid. Keeping this low leaves
+# only a whisper of tactile detail under the sun without re-drawing the tile lattice.
+DEFAULT_STRENGTH = 0.55         # relief exaggeration; higher = steeper normals
 DEFAULT_ALPHA_THRESHOLD = 8     # diffuse alpha (0..255) below which a texel is flat
 NEUTRAL = np.array([128, 128, 255], dtype=np.uint8)   # flat normal, +Z
 
