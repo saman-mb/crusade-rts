@@ -99,8 +99,9 @@ def _draw_grass(img, rng):
         x0 = cx + rng.uniform(-spread, spread)
         hgt = rng.uniform(0.32, 0.52) * CELL * SS
         lean = rng.uniform(-0.16, 0.16) * CELL * SS
-        # -15% saturation toward luma (#241 nit 3: the blades read neon under the warm grade).
-        g = (52 + rng.randint(-8, 12), 115 + rng.randint(-16, 24), 49 + rng.randint(-8, 12))
+        # Desaturated toward luma + the brightest outliers pulled down another ~10%
+        # (#241 nit 3: a few blades still popped neon under the warm grade).
+        g = (54 + rng.randint(-8, 10), 110 + rng.randint(-16, 14), 51 + rng.randint(-8, 10))
         wdt = max(2 * SS, int(0.03 * CELL * SS))
         d.line([(x0, base_y), (x0 + lean, base_y - hgt)], fill=g + (255,), width=wdt)
 
