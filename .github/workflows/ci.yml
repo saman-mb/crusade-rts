@@ -64,3 +64,15 @@ jobs:
             if [ "$code" -ne 0 ]; then echo "::error::$t exited $code"; fail=1; fi
           done
           exit "$fail"
+
+  # Pure-stdlib invariants for the Blender sprite pipeline core (#245). Runs only
+  # tools/sprite_manifest.py's tests -- NO Blender, NO pip install. This is the
+  # single source of truth for sheet layout / facings / manifest schema; the bpy
+  # driver (render_sprites.py) and Blender itself are never invoked in CI.
+  python-tools:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to the same SHA as the `tests` job's checkout (v4.4.0).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Sprite-manifest invariants
+        run: python3 tools/test_sprite_manifest.py

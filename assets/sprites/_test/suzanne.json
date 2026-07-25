@@ -1,0 +1,219 @@
+{
+  "schema": "crusade.sprite_sheet",
+  "version": 1,
+  "sheet": {
+    "path": "res://assets/sprites/_test/suzanne.png",
+    "width": 2048,
+    "height": 256,
+    "cell": [
+      256,
+      256
+    ]
+  },
+  "rig": {
+    "projection": "orthographic",
+    "elevation_deg": 30.0,
+    "yaw_deg": 45.0,
+    "ortho_scale": 2.82843,
+    "samples": 128,
+    "denoise": true,
+    "view_transform": "Standard",
+    "sun_compass": "NW",
+    "blender": "4.5.9 LTS",
+    "tile_size": [
+      128,
+      64
+    ],
+    "elevation_step_px": 32
+  },
+  "directions": {
+    "count": 8,
+    "order": "cw_from_screen_east",
+    "names": [
+      "E",
+      "SE",
+      "S",
+      "SW",
+      "W",
+      "NW",
+      "N",
+      "NE"
+    ]
+  },
+  "anim": {
+    "default": {
+      "frames": 1,
+      "fps": 0
+    }
+  },
+  "frames": [
+    {
+      "index": 0,
+      "dir": 0,
+      "dir_name": "E",
+      "facing": [
+        1.0,
+        0.0
+      ],
+      "anim": "default",
+      "frame": 0,
+      "rect": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        176
+      ]
+    },
+    {
+      "index": 1,
+      "dir": 1,
+      "dir_name": "SE",
+      "facing": [
+        0.707,
+        0.707
+      ],
+      "anim": "default",
+      "frame": 0,
+      "rect": [
+        256,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        176
+      ]
+    },
+    {
+      "index": 2,
+      "dir": 2,
+      "dir_name": "S",
+      "facing": [
+        0.0,
+        1.0
+      ],
+      "anim": "default",
+      "frame": 0,
+      "rect": [
+        512,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        176
+      ]
+    },
+    {
+      "index": 3,
+      "dir": 3,
+      "dir_name": "SW",
+      "facing": [
+        -0.707,
+        0.707
+      ],
+      "anim": "default",
+      "frame": 0,
+      "rect": [
+        768,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        176
+      ]
+    },
+    {
+      "index": 4,
+      "dir": 4,
+      "dir_name": "W",
+      "facing": [
+        -1.0,
+        0.0
+      ],
+      "anim": "default",
+      "frame": 0,
+      "rect": [
+        1024,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        176
+      ]
+    },
+    {
+      "index": 5,
+      "dir": 5,
+      "dir_name": "NW",
+      "facing": [
+        -0.707,
+        -0.707
+      ],
+      "anim": "default",
+      "frame": 0,
+      "rect": [
+        1280,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        176
+      ]
+    },
+    {
+      "index": 6,
+      "dir": 6,
+      "dir_name": "N",
+      "facing": [
+        0.0,
+        -1.0
+      ],
+      "anim": "default",
+      "frame": 0,
+      "rect": [
+        1536,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        176
+      ]
+    },
+    {
+      "index": 7,
+      "dir": 7,
+      "dir_name": "NE",
+      "facing": [
+        0.707,
+        -0.707
+      ],
+      "anim": "default",
+      "frame": 0,
+      "rect": [
+        1792,
+        0,
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        176
+      ]
+    }
+  ]
+}
