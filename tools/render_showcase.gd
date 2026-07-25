@@ -26,19 +26,19 @@ void fragment(){
 	float l5 = dot(texture(screen_tex, uv - vec2(0.0, px.y)).rgb, vec3(0.299,0.587,0.114));
 	float lavg = (l2 + l3 + l4 + l5) * 0.25;
 	c *= 1.0 + clamp(lum - lavg, -0.15, 0.15) * 0.15 / max(lum, 0.05);
-	vec3 hi = vec3(1.0,0.906,0.76); vec3 lo = vec3(0.50,0.55,0.73);
+	vec3 hi = vec3(0.99,0.95,0.87); vec3 lo = vec3(0.50,0.55,0.73);
 	c *= mix(lo, hi, smoothstep(0.10,0.86,lum));
-	c = mix(vec3(lum), c, 1.02);
-	c = clamp(c * 1.07 - 0.045, 0.0, 2.0);
+	c = mix(vec3(lum), c, 0.97);
+	c = clamp(c * 1.11 - 0.025, 0.0, 2.0);
 	// Warm sun sweep from upper-left, gone by ~55% across the frame.
 	float sweep = clamp(1.0 - (uv.x*0.9 + uv.y*0.95), 0.0, 1.0);
-	c += vec3(1.0,0.77,0.42)*sweep*0.10;
+	c += vec3(1.0,0.87,0.64)*sweep*0.045;
 	// Cool depth multiply from lower-right.
 	float depth = clamp((uv.x*0.6 + uv.y*0.75) - 0.55, 0.0, 1.0);
-	c *= mix(vec3(1.0), vec3(0.275,0.322,0.478), depth*0.16);
+	c *= mix(vec3(1.0), vec3(0.275,0.322,0.478), depth*0.11);
 	// Wide cool vignette.
 	float d = length(uv-vec2(0.5));
-	c = mix(c, c*vec3(0.62,0.66,0.82), smoothstep(0.5,1.05,d)*0.5);
+	c = mix(c, c*vec3(0.62,0.66,0.82), smoothstep(0.5,1.05,d)*0.26);
 	COLOR = vec4(c,1.0);
 }"
 
@@ -60,8 +60,10 @@ func _ready() -> void:
 	for _i in range(50):
 		await get_tree().process_frame
 	_golden_hour(map)
-	_add_campfire(map, Vector2i(26, 16))
-	_add_campfire(map, Vector2i(14, 21))
+	var fires := [Vector2i(26, 16), Vector2i(14, 21)]
+	_set_firelight(map, fires)
+	for c in fires:
+		_add_campfire(map, c)
 	_add_glint(map, Vector2i(6, 7))
 	_add_mist(map)
 	_full_rect_shader(GRADE_CODE, 100)
@@ -103,13 +105,13 @@ func _golden_hour(map: MapSystem) -> void:
 	var dn: CanvasModulate = map.get_node_or_null("DayNight") as CanvasModulate
 	if dn != null:
 		dn.set_process(false)
-		dn.color = Color(0.90, 0.86, 0.78)
+		dn.color = Color(0.98, 0.96, 0.91)
 	var sun: DirectionalLight2D = map.get_node_or_null("Sun") as DirectionalLight2D
 	if sun != null:
 		sun.set("tint_from_day_night", false)
 		sun.set_process(false)
 		sun.color = Color(1.0, 0.85, 0.63)
-		sun.energy = 0.55
+		sun.energy = 0.72
 
 
 func _glow(tex: Texture2D, col: Color, size_px: float, alpha: float, squash: float) -> Sprite2D:
@@ -132,16 +134,32 @@ func _soft(tex: Texture2D, col: Color, w_px: float, h_px: float, alpha: float) -
 	return s
 
 
+## Drives the terrain shader's firelight uniforms (#252). The warm ground pools are
+## computed in the terrain's own world-space fragment pass -- seamless across tiles,
+## never a sprite occluded into a diamond -- so they read as light on the ground.
+func _set_firelight(map: MapSystem, cells: Array) -> void:
+	var layer: TileMapLayer = map.get_elevation_layer(0)
+	if layer == null:
+		return
+	var mat := layer.material as ShaderMaterial
+	if mat == null:
+		return
+	var positions := PackedVector2Array()
+	for c in cells:
+		positions.append(IsoCoord.cart_to_iso(c))
+	mat.set_shader_parameter("fire_pos", positions)
+	mat.set_shader_parameter("fire_count", positions.size())
+	mat.set_shader_parameter("fire_color", Vector3(1.0, 0.58, 0.24))
+	mat.set_shader_parameter("fire_radius", 240.0)
+	mat.set_shader_parameter("fire_strength", 1.0)
+
+
 func _add_campfire(map: MapSystem, cell: Vector2i) -> void:
 	var pos := IsoCoord.cart_to_iso(cell)
 	var ltex := load(LIGHT_TEX) as Texture2D
-	if ltex != null:
-		var outer := _glow(ltex, Color(1.0, 0.52, 0.18), 300.0, 0.42, 0.5)
-		outer.position = pos
-		map.add_child(outer)
-		var inner := _glow(ltex, Color(1.0, 0.66, 0.28), 120.0, 0.55, 0.5)
-		inner.position = pos
-		map.add_child(inner)
+	# NOTE: the broad warm pool is now the terrain shader's firelight (see
+	# _set_firelight) -- seamless on the ground, no tile clip. Only the tight flame
+	# bloom stays a sprite below, sitting on top of the fire.
 	var ftex := load(FIRE_TEX) as Texture2D
 	if ftex != null:
 		var fire := Sprite2D.new()

@@ -424,6 +424,45 @@ def _gen_mega_water(ss):
     return img
 
 
+HD_GRASS_SRC = "aerial_grass_rock.png"   # CC0 Poly Haven, seamless top-down HD grass/soil
+
+
+def _load_hd_grass_mega(ss):
+    """Torus-periodic grass mega from a seamless CC0 HD *aerial* (top-down) texture.
+
+    The iso ground plane foreshortens 2:1 vertically, so the square source is
+    squashed to the MEGA 2:1 aspect -- which is exactly correct for the projection.
+    Seamlessness is guaranteed by resampling a 2x2 tiling and taking one full
+    period (the resize kernel then only ever sees continuous tiled content, so the
+    result wraps in both axes). Falls back to the procedural grass if absent.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    src = os.path.join(here, "..", "assets", "tilesets", "sources", HD_GRASS_SRC)
+    if not os.path.exists(src):
+        return _gen_mega_grass(ss)
+    w, h = MEGA_W * ss, MEGA_H * ss
+    img = Image.open(src).convert("RGB")
+    tw, th = img.size
+    tiled = Image.new("RGB", (tw * 2, th * 2))
+    for ox in (0, tw):
+        for oy in (0, th):
+            tiled.paste(img, (ox, oy))
+    big = tiled.resize((w * 2, h * 2), Image.LANCZOS)   # period becomes exactly (w, h)
+    mega = big.crop((0, 0, w, h))                       # one full period -> torus-periodic
+
+    # Colour-correct the raw aerial source toward the art-director's LUSH warm-olive
+    # grass target (#5f6d38 base) -- the stock photo is a dirt-heavy yellow-grey, so
+    # ease red/blue and lift green, then gently desaturate so it reads grass, not mud.
+    # Channel multiply preserves every grain of the HD micro-detail.
+    arr = np.asarray(mega, dtype=np.float32)
+    arr[..., 0] *= 0.80                                  # red   down (kill the mud/yellow)
+    arr[..., 1] *= 1.06                                  # green up  (read as grass)
+    arr[..., 2] *= 0.78                                  # blue  down (kill the cool grey cast)
+    lum = arr @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+    arr = lum[..., None] * 0.14 + arr * 0.86             # slight desaturate, no neon
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB")
+
+
 def _window_tiles(mega_ss, ss):
     """Yields (index, FINAL-res RGBA tile) for the 32 same-parity window crops.
 
@@ -465,7 +504,7 @@ def build_atlas(sources_dir):
     # The mega textures are the authoritative ground art. The dual-grid
     # transition tiles blend the SAME mega grass (one crop) over CC0 dirt, so
     # map borders stay coherent with the seamless interior field.
-    mega_grass_ss = _gen_mega_grass(SS)
+    mega_grass_ss = _load_hd_grass_mega(SS)   # HD CC0 aerial grass (falls back to procedural)
     mega_water_ss = _gen_mega_water(SS)
     grass_ss = mega_grass_ss.crop((0, 0, REGION_W * SS, REGION_H * SS))
     dirt_ss = _soften(_crop_cell(grass_sheet, GRASS_DIRT_COLS, GRASS_DIRT_ROWS, *DIRT_CELL))

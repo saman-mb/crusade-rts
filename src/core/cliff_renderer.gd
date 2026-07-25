@@ -15,11 +15,14 @@ extends RefCounted
 ## Exercised via render, not headless CI.
 
 const CLIFF_GROUP := "crusade_cliff"
-## Cast shadow: sun from NW -> the wall shades the ground toward SE. Near edge
-## sits at the wall base (dark), far edge is offset and fully transparent.
-const SHADOW_NEAR := Color(0.118, 0.137, 0.204, 0.55)   # ~#1E2334
-const SHADOW_FAR := Color(0.118, 0.137, 0.204, 0.0)
-const SHADOW_OFFSET := Vector2(16.0, 10.0)
+## Cast shadow (#248): sun from NW -> the wall throws a soft directional shadow
+## onto the ground toward SE (screen lower-right). Warm-dark tint (~#2A2418, never
+## pure black) so it reads under the golden grade; near edge sits at the wall base
+## (dark, ~40% opacity), far edge is offset ~= one face height (32px) and fully
+## transparent, so the band fades over its length.
+const SHADOW_NEAR := Color(0.165, 0.141, 0.094, 0.42)   # warm-dark ~#2A2418
+const SHADOW_FAR := Color(0.165, 0.141, 0.094, 0.0)
+const SHADOW_OFFSET := Vector2(24.0, 15.0)
 
 ## Shared unshaded material: the cliff faces point AWAY from the directional sun,
 ## so they must ignore its 2D light (they'd wash pale otherwise). Unshaded items

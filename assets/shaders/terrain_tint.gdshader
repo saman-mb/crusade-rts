@@ -25,6 +25,17 @@ uniform vec3 shadow_tone = vec3(0.34, 0.43, 0.26);       // deep JUNGLE-green sh
 uniform vec3 highlight_tone = vec3(1.30, 1.18, 0.82);    // warm ochre sun side (SC1 anchor #b3a34e)
 uniform vec3 rim_color = vec3(1.0, 0.81, 0.54);          // additive warm rim on the brightest facets
 uniform float rim_strength : hint_range(0.0, 0.5) = 0.16;
+// --- point firelight (#252) -----------------------------------------------------
+// Warm pools of firelight that live in the SAME continuous world-space pass as the
+// relief above -- so the glow has NO tile-pitch frequency and reads as light lying
+// on the ground, not a sprite clipped to a diamond. fire_count defaults to 0, so the
+// real game pays nothing and looks unchanged; only the showcase turns these on.
+const int FIRE_MAX = 8;
+uniform int fire_count = 0;
+uniform vec2 fire_pos[FIRE_MAX];                          // world-space fire centres
+uniform vec3 fire_color = vec3(1.0, 0.58, 0.24);          // warm ember tone
+uniform float fire_radius = 260.0;                        // pool reach in world px
+uniform float fire_strength : hint_range(0.0, 3.0) = 1.15;
 
 varying vec2 v_world;
 
@@ -90,4 +101,17 @@ void fragment() {
 	vec3 rim = rim_color * pow(lam, 3.0) * rim_strength;
 
 	COLOR.rgb = COLOR.rgb * bright * hue * relief_col + rim;
+
+	// Firelight pools: additive warm glow, distance measured on the GROUND plane
+	// (y stretched 2:1 to match the dimetric tiles) so each pool is a soft ellipse
+	// lying flat on the terrain. Quadratic falloff = a bright core, gentle skirt.
+	vec3 fire = vec3(0.0);
+	for (int i = 0; i < fire_count; i++) {
+		if (i >= FIRE_MAX) { break; }
+		vec2 dv = v_world - fire_pos[i];
+		dv.y *= 2.0;                                       // undo iso foreshorten
+		float f = 1.0 - smoothstep(0.0, fire_radius, length(dv));
+		fire += fire_color * (f * f) * fire_strength;
+	}
+	COLOR.rgb += fire;
 }

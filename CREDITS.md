@@ -10,8 +10,20 @@ vendors assets whose licenses permit redistribution — **CC0 / public domain**
 - **Author:** Screaming Brain Studios — https://opengameart.org/users/screaming-brain-studios
 - **Source:** https://opengameart.org/content/1000-isometric-floor-tiles
 - **License:** CC0 1.0 (Public Domain) — https://creativecommons.org/publicdomain/zero/1.0/
-- **Used in:** `assets/tilesets/terrain_atlas.png`, composited from the vendored
-  source sheets in `assets/tilesets/sources/` by `tools/pack_terrain_atlas.py`.
+- **Used in:** the dual-grid transition cells of `assets/tilesets/terrain_atlas.png`,
+  composited from the vendored source sheets in `assets/tilesets/sources/` by
+  `tools/pack_terrain_atlas.py`.
+- **Note:** CC0 requires no attribution; this entry is a courtesy acknowledgement.
+
+### HD terrain photo-textures — Poly Haven
+- **Author:** Poly Haven — https://polyhaven.com
+- **Source:** "Aerial Grass Rock" (https://polyhaven.com/a/aerial_grass_rock) and
+  "Rock Boulder Dry" (https://polyhaven.com/a/rock_boulder_dry), 2K diffuse maps.
+- **License:** CC0 1.0 (Public Domain) — https://creativecommons.org/publicdomain/zero/1.0/
+- **Used in:** the HD ground mega-texture of `assets/tilesets/terrain_atlas.png`
+  (`aerial_grass_rock`, via `tools/pack_terrain_atlas.py`, #247) and the HD rock
+  grain of `assets/cliffs/cliffs.png` (`rock_boulder_dry`, via `tools/gen_cliffs.py`,
+  #248). Vendored under `assets/tilesets/sources/` (see its SOURCE.txt / LICENSE.txt).
 - **Note:** CC0 requires no attribution; this entry is a courtesy acknowledgement.
 
 ### Doodad decor, campfire & light cookies — procedurally generated (project-owned)

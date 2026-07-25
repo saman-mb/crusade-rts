@@ -18,4 +18,16 @@ Only the specific sheets consumed by the packer are vendored here (not the full
 multi-megabyte pack). To regenerate assets/tilesets/terrain_atlas.png from these
 sources:  python3 tools/pack_terrain_atlas.py
 
+aerial_grass_rock.png
+  Original: "aerial_grass_rock_diff_2k.png" from Poly Haven (CC0).
+  Format:   2048x2048 RGB, seamless top-down aerial grass/soil diffuse.
+  Used by:  tools/pack_terrain_atlas.py -- the HD ground mega-texture (#247).
+
+rock_boulder_dry.png
+  Original: "rock_boulder_dry_diff_2k.png" from Poly Haven (CC0),
+            https://polyhaven.com/a/rock_boulder_dry.
+  Format:   2048x2048 RGB, warm-grey dry sandstone/boulder diffuse (sat ~17%).
+  Used by:  tools/gen_cliffs.py -- high-passed to warm-grey rock grain and
+            composited under the cliff-face palette gradient (#248 Cliffs v2).
+
 See LICENSE.txt (CC0) and /CREDITS.md.
