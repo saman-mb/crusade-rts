@@ -9,7 +9,7 @@ shader_type canvas_item;
 // this shader owns the terrain's undulation instead. Deterministic: pure hash noise.
 
 // --- colour drift ---
-uniform float tint_amp : hint_range(0.0, 0.4) = 0.10;    // brightness swing (+/-)
+uniform float tint_amp : hint_range(0.0, 0.4) = 0.08;    // brightness swing (+/-) -- trimmed (#241 nit 4: mid-field read a touch blotchy)
 uniform float tint_freq = 0.0016;                         // cycles per world px (low = broad patches)
 uniform float hue_amp : hint_range(0.0, 0.2) = 0.045;    // warm/cool swing
 uniform vec3 warm = vec3(1.03, 1.0, 0.93);
@@ -100,7 +100,16 @@ void fragment() {
 	vec3 relief_col = mix(shadow_tone, highlight_tone, lam);
 	vec3 rim = rim_color * pow(lam, 3.0) * rim_strength;
 
-	COLOR.rgb = COLOR.rgb * bright * hue * relief_col + rim;
+	// Land takes the full grass relief tint; WATER must NOT. The green/ochre relief
+	// greens the blue surface, and its world-space height swells land a different
+	// average value in each tile-window crop -> a hard stepped chevron at every water
+	// tile edge. Detect water by its blue-dominant albedo and give it a flat, hue-
+	// preserving directional sheen instead (the ripple crests + sun glint baked into
+	// the albedo carry the surface interest).
+	float wness = smoothstep(0.0, 0.10, COLOR.b - COLOR.r) * smoothstep(0.20, 0.35, COLOR.b);
+	vec3 land_c = COLOR.rgb * bright * hue * relief_col + rim;
+	vec3 water_c = COLOR.rgb * (0.90 + 0.20 * clamp(lam, 0.0, 1.0));
+	COLOR.rgb = mix(land_c, water_c, wness);
 
 	// Firelight pools: additive warm glow, distance measured on the GROUND plane
 	// (y stretched 2:1 to match the dimetric tiles) so each pool is a soft ellipse

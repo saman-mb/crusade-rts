@@ -398,25 +398,41 @@ def _gen_mega_grass(ss):
 
 
 def _gen_mega_water(ss):
-    """Seamless water mega texture at ss scale: deep-blue base, large soft depth
-    mottling, sparse short wave dashes. Torus-periodic like the grass mega."""
+    """Seamless SATURATED water mega (lead-artist #241 nit 5 + #243 nit 2): a saturated
+    blue base (#2E72A0) over deep-blue troughs (#1B5476). Broad depth swells are kept
+    GENTLE (floor 0.5) so they don't read as hard dark chevrons, and a FINE torus-
+    periodic ripple grain is layered on top -- smooth water otherwise shows a stepped
+    seam at each tile-window edge the way HD grass grain never does, so the grain gives
+    the surface the high-frequency tooth that hides those boundaries. Bright cyan wave
+    crests + warm-white sun-glint flecks. Torus-periodic like the grass mega."""
     w, h = MEGA_W * ss, MEGA_H * ss
     rng = np.random.default_rng(MEGA_SEED + 7)
-    base = _hex("#4A6B70")
-    deep = _hex("#2E4E56")
-    depth = 0.7 * _torus_noise(w, h, 3, 2, rng) + 0.3 * _torus_noise(w, h, 7, 4, rng)
-    rgb = _lerp_rgb(deep, base, np.clip(0.3 + depth * 0.85, 0.0, 1.0))
+    base = _hex("#2E86C0")      # strong blue (survives the relief shader's green multiply)
+    deep = _hex("#1E6494")      # deep blue
+    # NO broad depth swells: low-frequency variation gives each window crop a different
+    # average brightness, which shows as a hard stepped chevron at every tile edge (the
+    # grass hides that with HD grain; smooth water can't). Only fine ripple grain, so
+    # every window crop averages the same -> no tile step. Depth interest comes from the
+    # ripple crests + glint, not from bulk value swings.
+    grain = _torus_noise(w, h, 48, 24, rng)
+    val = np.clip(0.58 + (grain - 0.5) * 0.14, 0.0, 1.0)
+    rgb = _lerp_rgb(deep, base, val)
     img = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8), "RGB")
     d = ImageDraw.Draw(img)
     prng = random.Random(MEGA_SEED + 7)
-    wave = _hex("#7FB8CC")
-    for _i in range(340):
+    wave = _hex("#9AD8EA")      # bright cyan ripple crest
+    glint = _hex("#EAF3E0")     # warm-white sun glint
+    for _i in range(420):
         x = prng.uniform(0, w)
         y = prng.uniform(0, h)
         ln = prng.uniform(1.5, 5.0) * ss
-        col = tuple(int(wave[i] * 0.55 + base[i] * 0.45) for i in range(3))
-        if prng.random() < 0.25:
-            col = wave
+        r = prng.random()
+        if r < 0.20:
+            col = glint                                     # sparse warm sun glint
+        elif r < 0.50:
+            col = wave                                      # bright ripple crest
+        else:
+            col = tuple(int(wave[i] * 0.5 + base[i] * 0.5) for i in range(3))
         for dx in (-w, 0, w):
             for dy in (-h, 0, h):
                 d.line([(x + dx, y + dy), (x + dx + ln, y + dy)], fill=col,

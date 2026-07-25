@@ -44,8 +44,13 @@ void fragment(){
 
 const BG_CODE := "shader_type canvas_item;
 void fragment(){
-	vec3 top = vec3(0.54,0.455,0.376); vec3 bot = vec3(0.275,0.235,0.204);
-	COLOR = vec4(mix(top,bot,UV.y),1.0);
+	// Warm brown void gradient + a soft centre glow so the off-map wedge reads as
+	// atmospheric depth in every framing, not a flat unfinished triangle (#243 nit 1).
+	vec3 top = vec3(0.50,0.42,0.35); vec3 bot = vec3(0.20,0.17,0.15);
+	vec3 c = mix(top, bot, pow(UV.y, 1.15));
+	float d = distance(UV, vec2(0.42,0.35));
+	c *= 1.0 - smoothstep(0.2,0.95,d)*0.35;
+	COLOR = vec4(c,1.0);
 }"
 
 var _rng := RandomNumberGenerator.new()
@@ -165,6 +170,7 @@ func _add_campfire(map: MapSystem, cell: Vector2i) -> void:
 		var fire := Sprite2D.new()
 		fire.texture = ftex
 		fire.position = pos
+		fire.scale = Vector2(0.8, 0.8)                 # -20%: a touch large for the pit (#241 nit 1)
 		map.add_child(fire)
 		if ltex != null:
 			var core := _glow(ltex, Color(1.0, 0.54, 0.22), 44.0, 0.9, 0.8)
@@ -205,9 +211,10 @@ func _add_glint(map: MapSystem, lake_cell: Vector2i) -> void:
 		var fleck := _glow(ltex, Color(1.0, 0.90, 0.70), _rng.randf_range(6.0, 18.0), 0.7, 0.32)
 		fleck.position = fpos
 		map.add_child(fleck)
-	# Faint warm sky reflection over the lake's NW half -- ties the water into
-	# the golden scene instead of leaving it a cool slate hole.
-	var sky := _glow(ltex, Color(0.60, 0.46, 0.31), 560.0, 0.24, 0.42)
+	# Faint warm-gold sky glint over the lake's NW half -- with the saturated blue
+	# water (#241 nit 5) this only needs a light warm sheen, not the heavy brown wash
+	# that used to grey the surface out.
+	var sky := _glow(ltex, Color(0.72, 0.66, 0.46), 520.0, 0.14, 0.42)
 	sky.position = centre + Vector2(-70.0, -40.0)
 	map.add_child(sky)
 
