@@ -9,5 +9,13 @@ Author:  Screaming Brain Studios (https://opengameart.org/users/screaming-brain-
 Source:  https://opengameart.org/content/1000-isometric-floor-tiles
 License: CC0 1.0 (Public Domain)
 
+The HD photo textures in this directory are also CC0:
+
+Work:    "Aerial Grass Rock" and "Rock Boulder Dry" 2k diffuse textures
+Author:  Poly Haven (https://polyhaven.com)
+Source:  https://polyhaven.com/a/aerial_grass_rock
+         https://polyhaven.com/a/rock_boulder_dry
+License: CC0 1.0 (Public Domain)
+
 CC0 imposes no attribution requirement. The CREDITS.md entry at the repo root
 is a courtesy acknowledgement of provenance, not an obligation.
