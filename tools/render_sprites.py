@@ -62,8 +62,10 @@ _SHIFT_FRAC = (sm.ANCHOR[1] - CELL / 2.0) / CELL     # 0.1875 downward
 SHIFT_X = 0.0
 SHIFT_Y = _SHIFT_FRAC
 
-# --- Rig angles (art-director's numbers) ---
-CAM_EULER = (math.radians(60.0), 0.0, math.radians(45.0))
+# --- Rig angles (derived from sm so the manifest's rig provenance can't lie) ---
+# Blender camera pitch is measured from vertical, so 90 - elevation; yaw is the
+# iso yaw verbatim. With sm defaults this is (radians(60), 0, radians(45)).
+CAM_EULER = (math.radians(90.0 - sm.CAM_ELEVATION_DEG), 0.0, math.radians(sm.CAM_YAW_DEG))
 CAM_DIST = 12.0                       # ortho: position only affects clipping
 MODEL_SCALE = 0.7                     # Suzanne ~2.7 wide -> ~1.9 (footprint ~1 tile)
 

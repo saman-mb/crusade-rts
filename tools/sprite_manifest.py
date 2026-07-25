@@ -37,7 +37,7 @@ ANCHOR = (128, 176)
 
 # --- Rig provenance (echoed verbatim into each manifest's "rig" block) ---
 PROJECTION = "orthographic"
-CAM_ELEVATION_DEG = 30.0      # iso pitch of the true 2:1 diamond (atan(0.5) rounds here)
+CAM_ELEVATION_DEG = 30.0      # elevation where sin(θ)=0.5 -> ground foreshortens to the 2:1 diamond
 CAM_YAW_DEG = 45.0            # iso yaw
 # ortho_scale so a 1x1 world tile renders as exactly one TILE_W x TILE_H diamond:
 # CELL_W is 2 tiles across, and the iso diamond's world diagonal is sqrt(2).
