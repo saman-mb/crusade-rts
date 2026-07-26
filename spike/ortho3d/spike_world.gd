@@ -205,7 +205,7 @@ func _input(event: InputEvent) -> void:
 	var vp_pos := _to_subviewport(mb.position)
 	var from := _cam.project_ray_origin(vp_pos)
 	var dir := _cam.project_ray_normal(vp_pos)
-	var space := _subvp.world_3d.direct_space_state
+	var space := _subvp.find_world_3d().direct_space_state
 	# Try units first.
 	var q := PhysicsRayQueryParameters3D.create(from, from + dir * 200.0, UNITS_LAYER)
 	var hit := space.intersect_ray(q)
